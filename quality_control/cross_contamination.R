@@ -4,14 +4,13 @@ library("stringr")
 library("crayon")
 }))
 
-# ARGUMENTS
-args = commandArgs(trailingOnly=TRUE)
+# Get command-line arguments (excluding default R arguments)
+args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args)>0) {
-  for(i in 1:length(args)){
-    eval(parse(text=args[[i]]))
-  }
-}
+# Assign arguments to variables
+reads_path  <- args[1]
+primers_path <- args[2]
+output_path <- args[3]
 
 #' @title cross_contamination: Reveal cross contamination in the experiment
 #'
@@ -25,7 +24,6 @@ if (length(args)>0) {
 #' threshold, it reports a possible contamination.
 #'
 #' @param reads_path Path to directory where FASTQ files are located
-#' @param plate_path Path to the plate layout CSV file
 #' @param primers_path path to primer sequences (FASTA), if NULL, 
 #' the default primers are loaded located in primers.fasta
 #' @param forward_pattern Pattern with which forward reads are recognized, 
@@ -41,11 +39,13 @@ if (length(args)>0) {
 #' @examples
 #' # Example usage:
 #' status <- cross_contamination(reads_path="data/run/", primers_path="path/to/primers.fasta")
-cross_contamination <- function(reads_path, primers_path=NULL, forward_pattern="_L00\\d_R1_00\\d.fastq",reverse_pattern="_L00\\d_R2_00\\d.fastq",
+cross_contamination <- function(reads_path, primers_path=NULL, 
+                                forward_pattern="_L00\\d_R1_00\\d.fastq",
+                                reverse_pattern="_L00\\d_R2_00\\d.fastq",
                                 mode="both", threshold=0.9){
   if (is.null(primers_path)){
     message(blue("Analysing default primers"))
-    primers <- readDNAStringSet(paste0(dirname(rstudioapi::getSourceEditorContext()$path),"/primers.fasta"))
+    primers <- readDNAStringSet("../primers.fasta")
   } else primers <- readDNAStringSet(primers_path)  
   
   primersF_names <- names(primers)[grepl("F\\d",names(primers))]
@@ -70,7 +70,6 @@ cross_contamination <- function(reads_path, primers_path=NULL, forward_pattern="
   if (mode=="reverse" | mode=="both") reverse_reads <- sort(list.files(paste(reads_path), pattern=reverse_pattern, full.names = TRUE))
   # analysis samples one by one in for loop
   if (mode=="forward" | mode=="both") {
-  
     for (num_sample in 1:length(forward_reads)){
       # fastq
       fq <- readFastq(forward_reads[num_sample])

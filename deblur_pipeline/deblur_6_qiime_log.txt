@@ -1,0 +1,5 @@
+Imported manifest_knihovna9.tsv as SingleEndFastqManifestPhred33V2 to knihovna9.qza
+Saved Visualization to: output/knihovna9_imported_seqs.qzv
+Saved FeatureTable[Frequency] to: output/knihovna9_ASV_abundance.qza
+Saved FeatureData[Sequence] to: output/knihovna9_ASV_seqs.qza
+Saved DeblurStats to: output/knihovna9_stats_deblur.qza

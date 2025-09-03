@@ -6,7 +6,7 @@ check if it fits your data as well.
 
 Whole workflow can be execute main.sh, where you have to change paths to conda environments and to your data
 ```bash
-bash main.sh
+bash main_16s.sh
 ```
 
 **1. Cross contamination**
