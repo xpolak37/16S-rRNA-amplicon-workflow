@@ -2,28 +2,25 @@
 eval "$(conda shell.bash hook)"
 
 # variables for conda environment
-conda_env_dir_quality="/home/povp/conda_envs/quality"
-conda_env_dir_blast="/home/povp/conda_envs/blast_env"
-conda_env_dir_R="/home/povp/conda_envs/R_v4_env"
+amplicon_16s_env=$1
+conda_env_dir_blast=$2
 
 # paths for data storage
-path_input="/home/povp/seq_data/16S/knihovna11"
-path_output="/home/povp/16S_deblur/knihovna11/quality_raw/"
-path_project_dir="/home/povp/16S_deblur/knihovna11"
+path_input=$3
+path_project_dir=$4
+path_output=${path_project_dir}/quality_raw
 
 # activate conda environment 
-conda activate ${conda_env_dir_quality}
+conda activate ${amplicon_16s_env}
 
 # info for tools and versions txt
 echo "main_qc.sh:" >> ${path_project_dir}/run_info/tools.txt
 
 # making dirs
 mkdir ${path_output}
-cd ${path_input}
 
 # run fastqc
 find ${path_input} -type f -name "*.fastq.gz" | parallel -j 10 "fastqc -o "${path_output}" -quiet -t 5"
-#find . -type f -name "*.fastq.gz" | xargs fastqc -o "${path_output}" -quiet -t 20
 
 ## track version
 fastqc --version >> ${path_project_dir}/run_info/tools.txt
@@ -118,7 +115,7 @@ echo -e "Sample\tRaw\tTrimmed\tDecontaminated" > ${outfile}
 awk 'NR>1 {printf "%s\t%.0f\n", $1, $7*1000000}' ${path_output}/multiqc_data/multiqc_general_stats.txt >> ${outfile}
 
 ## LOW SEQUENCING DEPTH SAMPLES
-echo "SAMPLES BELOW 1M:" >> custom_summary.txt
+echo "SAMPLES BELOW 10k:" >> custom_summary.txt
 awk 'NR > 1 && $2 < 10000' ${path_project_dir}/run_info/read_counts_summary.txt >> custom_summary.txt
 
 # copy the summaries to the run_info file

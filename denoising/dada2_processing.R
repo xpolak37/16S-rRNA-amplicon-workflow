@@ -11,10 +11,6 @@ input_path  <- args[1]
 output_path <- args[2]
 path_project_dir <- args[3]
 
-input_path <- "/home/povp/16S_deblur/knihovna11/decontaminated/human_phix"
-output_path <- "/home/povp/16S_deblur/knihovna11/dada2/"
-path_project_dir <- "/home/povp/16S_deblur/knihovna11"
-
 nproc = 20
 
 # samples
