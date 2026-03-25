@@ -1,51 +1,23 @@
 #!/bin/bash
-eval "$(conda shell.bash hook)"
 
-# paths for data storage
-export path_input=$1
-export path_project_dir=$2
-export path_output=${path_project_dir}/denoised/
-
-# activate environment
-conda activate ${amplicon_16s_env}
-
-# info for tools and versions txt
-echo -e "\nmain_deblur.sh:" >> ${path_project_dir}/run_info/tools.txt
-
-# making dirs
-mkdir ${path_output}
-mkdir ${path_output}/merged
-mkdir ${path_output}/oriented
-mkdir ${path_output}/dada2/
-mkdir ${path_output}/dada2/qiime2
-mkdir ${path_output}/dada2/qiime2/output
-
-# Preprocessing
-bash qiime_preprocessing.sh ${path_input} ${path_project_dir} ${path_output}
-
-# QIIME + DADA2
-path_qiime_input=${path_output}/oriented
-path_output=${path_output}/dada2
-
-# DADA2 QIIME2
-conda activate ${qiime_env}
-
-cd ${path_qiime_input}
-
-for f in *_*; do
-  [ -f "$f" ] && mv "$f" "${f//_/-}"
-done
 
 # samplesheet
 echo -e "sample-id\tabsolute-filepath\tdirection" > ${path_output}/qiime2/manifest.tsv
 	
-for read in ${path_qiime_input}/*-oriented.fq; do
-	sample=$(echo $read| sed 's/-oriented.fq//')
+for read in *-mergedpairs.fastq.gz; do
+	sample=$(echo $read| sed 's/-mergedpairs.fastq.gz//')
         sample=$(basename ${sample})
-	echo -e "${sample}\t${read}\tforward" >>  ${path_output}/qiime2/manifest.tsv
+	echo -e "${sample}\t${read}\tforward" >>  qiime_manifest.tsv
 done
 
 # QIIME
+
+
+## Dereplicate sequences to get FeatureData[Sequence] which will be used as reference
+## db in deblur to avoid positive filtering. 
+#cd ${path_scripts}/denoising
+#python build_reference_db.py ${path_project_dir}/oriented/ ${path_project_dir}/qiime2/reference_seqs.fasta
+
 cd ${path_output}/qiime2
 
 # Import
@@ -56,14 +28,16 @@ qiime tools import \
     	--output-path imported_data.qza
 
 # Deblur
-qiime dada2 denoise-single \
-  --i-demultiplexed-seqs imported_data.qza \
-  --p-trim-left 0 \
-  --p-trunc-len ${p_trim_length} \
-  --o-representative-sequences output/ASV_seqs.qza \
-  --o-table output/ASV_abundance.qza \
-  --o-denoising-stats output/stats_dada.qza \
-  --p-n-threads 40
+qiime deblur denoise-16S \
+        --i-demultiplexed-seqs imported_data.qza \
+	--p-trim-length ${p_trim_length} \
+        --p-min-reads ${min_reads} \
+        --p-min-size ${min_size} \
+	--p-sample-stats \
+	--o-representative-sequences output/ASV_seqs.qza \
+	--o-table output/ASV_abundance.qza \
+	--o-stats output/stats_deblur.qza \
+        --p-jobs-to-start 20
 
 qiime tools export \
 --input-path output/ASV_abundance.qza \
@@ -72,7 +46,7 @@ qiime tools export \
 --input-path output/ASV_seqs.qza \
 --output-path output/exported
 qiime tools export \
---input-path output/stats_dada.qza \
+--input-path output/stats_deblur.qza \
 --output-path output/exported
 
 biom convert -i output/exported/feature-table.biom -o output/exported/feature-table.tsv --to-tsv
@@ -121,4 +95,3 @@ rm ${helper_outfile}
 
 # cp the result in run_info
 cp ${path_output}/asv_table.tsv ${path_project_dir}/run_info/asv_table.tsv
-
