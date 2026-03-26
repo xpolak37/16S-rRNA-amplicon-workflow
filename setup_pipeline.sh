@@ -141,6 +141,7 @@ mkdir -p classifiers
 mkdir -p singularity_cache
 mkdir -p logs
 mkdir -p bowtie_phix
+mkdir -p hostile_index
 
 # Setup log file
 LOGFILE="${INSTALL_DIR}/logs/setup_$(date +%Y%m%d_%H%M%S).log"
@@ -171,7 +172,7 @@ log_success "All required tools are available"
 
 echo ""
 log_info "========================================="
-log_info "STEP 1/3: Downloading pre-built taxonomic classifiers"
+log_info "STEP 1/5: Downloading pre-built taxonomic classifiers"
 log_info "========================================="
 
 CLASSIFIERS_DIR="${INSTALL_DIR}/classifiers"
@@ -213,7 +214,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 2/4: Downloading Singularity containers"
+log_info "STEP 2/5: Downloading Singularity containers"
 log_info "========================================="
 
 SING_DIR="${INSTALL_DIR}/singularity_cache"
@@ -230,6 +231,7 @@ declare -A CONTAINERS=(
     ["quay.io-qiime2-amplicon-2026.1.img"]="docker://quay.io/qiime2/amplicon:2026.1"
     ["quay.io-biocontainers-entrez-direct-24.0--he881be0_0.img"]="docker://quay.io/biocontainers/entrez-direct:24.0--he881be0_0"
     ["quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img"]="docker://quay.io/biocontainers/bowtie2:2.5.5--ha27dd3b_0"
+    ["quay.io-biocontainers-hostile-2.0.2--pyhdfd78af_0.img"]="docker://quay.io/biocontainers/hostile:2.0.2--pyhdfd78af_0"
 )
 CONTAINER_COUNT=0
 TOTAL_CONTAINERS=${#CONTAINERS[@]}
@@ -261,7 +263,7 @@ done
 
 echo ""
 log_info "========================================="
-log_info "STEP 3/4: Building bowtie indexes"
+log_info "STEP 3/5: Building bowtie indexes"
 log_info "========================================="
 
 BOWTIE_DIR="${INSTALL_DIR}/bowtie_phix"
@@ -294,12 +296,46 @@ else
 fi
 
 #===============================================================================
+# DOWNLOAD HOSTILE INDEX
+#===============================================================================
+
+echo ""
+log_info "========================================="
+log_info "STEP 4/5: Downloading hostile human decontamination index"
+log_info "========================================="
+
+HOSTILE_DIR="${INSTALL_DIR}/hostile_index"
+cd "${HOSTILE_DIR}"
+
+if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
+    log_warn "Hostile index already present. Skipping."
+else
+    log_info "Downloading hostile human-t2t-hla-argos985-mycob140 index..."
+
+    singularity exec \
+        --bind "${HOSTILE_DIR}:/data" \
+        --env HOSTILE_CACHE_DIR=/data \
+        ${SING_DIR}/quay.io-biocontainers-hostile-2.0.2--pyhdfd78af_0.img \
+        hostile index fetch --name human-t2t-hla-argos985-mycob140 --bowtie2
+
+    if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
+        log_success "Hostile index downloaded successfully"
+    else
+        log_error "Failed to download hostile index"
+        log_info "You can manually download it with:"
+        log_info "  hostile fetch --name human-t2t-hla-argos985-mycob140"
+        log_info "  Then move the index files to: ${HOSTILE_DIR}/"
+        exit 1
+    fi
+fi
+
+#===============================================================================
 # DOWNLOAD TESTING DATASET
 #===============================================================================
 
 echo ""
 log_info "========================================="
-log_info "STEP 4/4: Downloading test dataset"
+log_info "STEP 5/5: Downloading test dataset"
 log_info "========================================="
 
 TEST_DIR="${PIPELINE_DIR}"
@@ -363,6 +399,8 @@ params {
     // Cache directories
     singularity_cache_dir = '${INSTALL_DIR}/singularity_cache'
     classifiers_dir    = '${INSTALL_DIR}/classifiers'
+    bowtie_dir         = '${INSTALL_DIR}/bowtie_phix'
+    hostile_index_dir  = '${INSTALL_DIR}/hostile_index'
 }
 EOF
 
@@ -390,6 +428,8 @@ echo "  - Total time: ${MINUTES} minutes ${SECONDS} seconds"
 echo ""
 echo "Resource Locations:"
 echo "  - Classifiers:     ${INSTALL_DIR}/classifiers/"
+echo "  - Hostile index:      ${INSTALL_DIR}/hostile_index/"
+echo "  - Bowtie PhiX:       ${INSTALL_DIR}/bowtie_phix/"
 echo "  - Containers:         ${INSTALL_DIR}/singularity_cache/"
 echo "  - Configuration:      ${CONFIG_FILE}"
 echo "  - Log file:           ${LOGFILE}"

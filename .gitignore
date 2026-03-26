@@ -1,0 +1,15 @@
+# Pipeline resource directories (created by setup_pipeline.sh)
+classifiers/
+singularity_cache/
+bowtie_phix/
+hostile_index/
+logs/
+
+# Nextflow working files
+work/
+.nextflow/
+.nextflow.log*
+results/
+
+# Test data
+test/

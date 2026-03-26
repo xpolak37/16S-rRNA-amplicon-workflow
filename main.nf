@@ -124,15 +124,15 @@ workflow {
     // fastqc TRIMMED
     FASTQC_TRIMMED(CUTADAPT.out.reads, "trimmed")
     
-    // Host removal
-    path_bowtie_phix=params.bowtie_dir
-    // TO DO 
-    // HOST_REMOVAL(CUTADAPT.out.reads)
-    // PHIX_REMOVAL(HOST_REMOVAL.out.reads,path_bowtie_phix)
+    // Host and PhiX removal
+    path_bowtie_phix = params.bowtie_dir
+    path_hostile_index = params.hostile_index_dir
+    HOST_REMOVAL(CUTADAPT.out.reads, path_hostile_index)
+    PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
 
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
-        dada2_input_paired = CUTADAPT.out.reads
+        dada2_input_paired = PHIX_REMOVAL.out.reads
         .map { sample_id, r1, r2 -> [r1, r2] }
         .flatten()
         .collect()
@@ -144,7 +144,7 @@ workflow {
     def needs_merging = ['deblur', 'unoise','dada2_single']
 
     if (workflowsToRun.asv_tools.any { it in needs_merging }) {
-        MERGING_READS(CUTADAPT.out.reads)
+        MERGING_READS(PHIX_REMOVAL.out.reads)
     }
 
     // Orienting (only for tools that can have oriented reads)
