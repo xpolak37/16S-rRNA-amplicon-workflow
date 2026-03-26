@@ -12,24 +12,16 @@ process HOST_REMOVAL {
 
     script:
     """
-    export TMPDIR=\${PWD}/tmp
-    mkdir -p \${PWD}/tmp
-    export HOSTILE_CACHE_DIR=${host_index_dir}
+    bowtie2 \\
+        -x ${host_index_dir}/human-t2t-hla-argos985-mycob140 \\
+        -1 ${read1} \\
+        -2 ${read2} \\
+        --un-conc-gz ${sample_id}_R%.host_removed.fastq.gz \\
+        --threads ${task.cpus} \\
+        > /dev/null 2> bowtie2_host.log
 
-    hostile clean \\
-        --fastq1 ${read1} \\
-        --fastq2 ${read2} \\
-        --index human-t2t-hla-argos985-mycob140 \\
-        --aligner bowtie2 \\
-        --output \${PWD} \\
-        --threads ${task.cpus}
-
-    # Debug: show what hostile produced
-    echo "Files after hostile clean:"
-    ls -la *.fastq.gz
-
-    mv *.clean_1.fastq.gz ${sample_id}_R1.host_removed.fastq.gz
-    mv *.clean_2.fastq.gz ${sample_id}_R2.host_removed.fastq.gz
+    echo "HOST_REMOVAL summary:"
+    tail -1 bowtie2_host.log
     """
 }
 
@@ -48,23 +40,15 @@ process PHIX_REMOVAL {
 
     script:
     """
-    export TMPDIR=\${PWD}/tmp
-    mkdir -p \${PWD}/tmp
-    export HOSTILE_CACHE_DIR=${path_bowtie_phix}
+    bowtie2 \\
+        -x ${path_bowtie_phix}/phiX174 \\
+        -1 ${read1} \\
+        -2 ${read2} \\
+        --un-conc-gz ${sample_id}_R%.decontam.fastq.gz \\
+        --threads ${task.cpus} \\
+        > /dev/null 2> bowtie2_phix.log
 
-    hostile clean \\
-        --fastq1 ${read1} \\
-        --fastq2 ${read2} \\
-        --index phiX174 \\
-        --aligner bowtie2 \\
-        --output \${PWD} \\
-        --threads ${task.cpus}
-
-    # Debug: show what hostile produced
-    echo "Files after hostile clean:"
-    ls -la *.fastq.gz
-
-    mv *.clean_1.fastq.gz ${sample_id}_R1.decontam.fastq.gz
-    mv *.clean_2.fastq.gz ${sample_id}_R2.decontam.fastq.gz
+    echo "PHIX_REMOVAL summary:"
+    tail -1 bowtie2_phix.log
     """
 }
