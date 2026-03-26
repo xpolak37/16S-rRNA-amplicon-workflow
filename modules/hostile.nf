@@ -21,8 +21,12 @@ process HOST_REMOVAL {
         --fastq2 ${read2} \\
         --index human-t2t-hla-argos985-mycob140 \\
         --aligner bowtie2 \\
-        --output . \\
+        --output \${PWD} \\
         --threads ${task.cpus}
+
+    # Debug: show what hostile produced
+    echo "Files after hostile clean:"
+    ls -la *.fastq.gz
 
     mv *.clean_1.fastq.gz ${sample_id}_R1.host_removed.fastq.gz
     mv *.clean_2.fastq.gz ${sample_id}_R2.host_removed.fastq.gz
@@ -53,8 +57,12 @@ process PHIX_REMOVAL {
         --fastq2 ${read2} \\
         --index phiX174 \\
         --aligner bowtie2 \\
-        --output . \\
+        --output \${PWD} \\
         --threads ${task.cpus}
+
+    # Debug: show what hostile produced
+    echo "Files after hostile clean:"
+    ls -la *.fastq.gz
 
     mv *.clean_1.fastq.gz ${sample_id}_R1.decontam.fastq.gz
     mv *.clean_2.fastq.gz ${sample_id}_R2.decontam.fastq.gz
