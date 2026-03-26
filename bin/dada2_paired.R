@@ -37,7 +37,7 @@ minOverlap  <- as.integer(get_arg(args, "--minOverlap",   "12"))
 fnFs <- input_R1
 fnRs <- input_R2
 
-sample.names <- sub("_R[12].trimmed.fastq.gz", "", basename(fnFs))
+sample.names <- sub("_R[12]\\.[a-z_]+\\.fastq\\.gz$", "", basename(fnFs))
 
 # filtering
 filtFs <- file.path("filtered", paste0(sample.names, "_F_filt.fastq.gz"))

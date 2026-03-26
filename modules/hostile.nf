@@ -7,8 +7,8 @@ process HOST_REMOVAL {
 
     output:
     tuple val(sample_id),
-          path("*.clean_1.fastq.gz"),
-          path("*.clean_2.fastq.gz"), emit: reads
+          path("${sample_id}_R1.host_removed.fastq.gz"),
+          path("${sample_id}_R2.host_removed.fastq.gz"), emit: reads
 
     script:
     """
@@ -23,6 +23,9 @@ process HOST_REMOVAL {
         --aligner bowtie2 \\
         --output . \\
         --threads ${task.cpus}
+
+    mv *.clean_1.fastq.gz ${sample_id}_R1.host_removed.fastq.gz
+    mv *.clean_2.fastq.gz ${sample_id}_R2.host_removed.fastq.gz
     """
 }
 
@@ -36,8 +39,8 @@ process PHIX_REMOVAL {
 
     output:
     tuple val(sample_id),
-          path("*.clean_1.fastq.gz"),
-          path("*.clean_2.fastq.gz"), emit: reads
+          path("${sample_id}_R1.decontam.fastq.gz"),
+          path("${sample_id}_R2.decontam.fastq.gz"), emit: reads
 
     script:
     """
@@ -52,5 +55,8 @@ process PHIX_REMOVAL {
         --aligner bowtie2 \\
         --output . \\
         --threads ${task.cpus}
+
+    mv *.clean_1.fastq.gz ${sample_id}_R1.decontam.fastq.gz
+    mv *.clean_2.fastq.gz ${sample_id}_R2.decontam.fastq.gz
     """
 }
