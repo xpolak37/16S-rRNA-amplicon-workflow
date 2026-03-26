@@ -231,7 +231,6 @@ declare -A CONTAINERS=(
     ["quay.io-qiime2-amplicon-2026.1.img"]="docker://quay.io/qiime2/amplicon:2026.1"
     ["quay.io-biocontainers-entrez-direct-24.0--he881be0_0.img"]="docker://quay.io/biocontainers/entrez-direct:24.0--he881be0_0"
     ["quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img"]="docker://quay.io/biocontainers/bowtie2:2.5.5--ha27dd3b_0"
-    ["quay.io-biocontainers-hostile-2.0.2--pyhdfd78af_0.img"]="docker://quay.io/biocontainers/hostile:2.0.2--pyhdfd78af_0"
 )
 CONTAINER_COUNT=0
 TOTAL_CONTAINERS=${#CONTAINERS[@]}
@@ -296,35 +295,38 @@ else
 fi
 
 #===============================================================================
-# DOWNLOAD HOSTILE INDEX
+# DOWNLOAD HUMAN DECONTAMINATION INDEX
 #===============================================================================
 
 echo ""
 log_info "========================================="
-log_info "STEP 4/5: Downloading hostile human decontamination index"
+log_info "STEP 4/5: Downloading human decontamination bowtie2 index"
 log_info "========================================="
 
 HOSTILE_DIR="${INSTALL_DIR}/hostile_index"
 cd "${HOSTILE_DIR}"
 
 if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
-    log_warn "Hostile index already present. Skipping."
+    log_warn "Human decontamination index already present. Skipping."
 else
-    log_info "Downloading hostile human-t2t-hla-argos985-mycob140 index..."
+    log_info "Downloading human-t2t-hla-argos985-mycob140 bowtie2 index..."
 
-    singularity exec \
-        --bind "${HOSTILE_DIR}:/data" \
-        --env HOSTILE_CACHE_DIR=/data \
-        ${SING_DIR}/quay.io-biocontainers-hostile-2.0.2--pyhdfd78af_0.img \
-        hostile index fetch --name human-t2t-hla-argos985-mycob140 --bowtie2
+    wget "https://objectstorage.uk-london-1.oraclecloud.com/n/lrbvkel2wjot/b/human-genome-bucket/o/human-t2t-hla-argos985-mycob140.tar" \
+        -O human-t2t-hla-argos985-mycob140.tar 2>&1 | tee -a "${LOGFILE}"
 
-    if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
-        log_success "Hostile index downloaded successfully"
+    if [ $? -eq 0 ]; then
+        log_info "Extracting bowtie2 index..."
+        tar -xf human-t2t-hla-argos985-mycob140.tar >> "${LOGFILE}" 2>&1
+        rm human-t2t-hla-argos985-mycob140.tar
+
+        if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
+            log_success "Human decontamination index downloaded successfully"
+        else
+            log_error "Index extraction failed"
+            exit 1
+        fi
     else
-        log_error "Failed to download hostile index"
-        log_info "You can manually download it with:"
-        log_info "  hostile fetch --name human-t2t-hla-argos985-mycob140"
-        log_info "  Then move the index files to: ${HOSTILE_DIR}/"
+        log_error "Failed to download human decontamination index"
         exit 1
     fi
 fi
