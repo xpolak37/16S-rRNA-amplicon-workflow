@@ -272,8 +272,65 @@ results
 | `assigntaxonomy/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using DADA2 assignTaxonomy |
 | `idtaxa/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using DECIPHER IdTaxa |
 | `metastandard/` | Standardized output tables| Standardized outputs of all branches of workflows  (DADA2 & Deblur & QNB & QBLAST & assignTaxonomy & IdTaxa)  |
+| `mock_evaluation/` | Barplots, metrics, composition tables | Mock community evaluation comparing observed vs reference composition |
 | `multiqc/` | MultiQC reports & JSON/logs | Aggregated QC metrics from all tools and samples |
 | `pipeline_info/` | HTML, DAG, trace, timeline | Pipeline execution reports and workflow DAG |
+
+---
+
+## 🧪 Mock Community Evaluation
+
+The pipeline includes automatic evaluation of mock community samples against a known reference composition. This feature helps assess the accuracy of the taxonomic classification.
+
+### How it works
+
+1. **Identifies mock samples** using regex pattern (default: `Mock\d+`)
+2. **Extracts genus-level abundances** from MetaStandard output
+3. **Compares with reference composition** at genus level
+4. **Generates outputs:**
+   - Stacked barplot comparing reference vs observed
+   - Deviation metrics (Bray-Curtis dissimilarity, Pearson correlation, RMSE)
+   - Full composition table
+
+### Configuration
+
+Mock evaluation is enabled by default. Configure in `nextflow.config`:
+
+```groovy
+params {
+    mock_evaluation = true                          // Enable/disable
+    mock_pattern = 'Mock\\d+'                       // Regex to identify mock samples
+    mock_abundance = './composition/mock_asv_abundance.csv'  // Reference abundances
+    mock_taxa = './composition/mock_taxa.csv'       // Reference taxonomy
+    mock_top_n = 15                                  // Top genera to display
+}
+```
+
+### Reference Files
+
+Place your mock community reference files in the `composition/` directory:
+
+**mock_asv_abundance.csv** - Expected abundances per ASV:
+```csv
+ASV,Mock Reference
+ASV1,0.042
+ASV2,0.101
+...
+```
+
+**mock_taxa.csv** - Taxonomy for each ASV:
+```csv
+ASV,Domain,Phylum,Class,Order,Family,Genus,Species
+ASV1,Bacteria,Proteobacteria,Gammaproteobacteria,Pseudomonadales,Pseudomonadaceae,Pseudomonas,Pseudomonas aeruginosa
+...
+```
+
+### Output Files
+
+For each ASV tool + classifier combination:
+- `<workflow>_mock_barplot.png` - Visual comparison
+- `<workflow>_mock_metrics.tsv` - Quantitative metrics
+- `<workflow>_mock_composition.tsv` - Full data table
 
 ---
 

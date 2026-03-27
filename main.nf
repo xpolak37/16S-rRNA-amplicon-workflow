@@ -63,6 +63,20 @@ include { METASTANDARD as AT_DADA2_PAIRED_METASTANDARD }        from './modules/
 include { METASTANDARD as AT_DADA2_SINGLE_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as AT_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
 
+// Mock community evaluation
+include { MOCK_EVALUATION as NB_DADA2_PAIRED_MOCK }        from './modules/mock_evaluation'
+include { MOCK_EVALUATION as NB_DADA2_SINGLE_MOCK }        from './modules/mock_evaluation'
+include { MOCK_EVALUATION as NB_DEBLUR_MOCK }              from './modules/mock_evaluation'
+include { MOCK_EVALUATION as BLAST_DADA2_PAIRED_MOCK }     from './modules/mock_evaluation'
+include { MOCK_EVALUATION as BLAST_DADA2_SINGLE_MOCK }     from './modules/mock_evaluation'
+include { MOCK_EVALUATION as BLAST_DEBLUR_MOCK }           from './modules/mock_evaluation'
+include { MOCK_EVALUATION as IDTAXA_DADA2_PAIRED_MOCK }    from './modules/mock_evaluation'
+include { MOCK_EVALUATION as IDTAXA_DADA2_SINGLE_MOCK }    from './modules/mock_evaluation'
+include { MOCK_EVALUATION as IDTAXA_DEBLUR_MOCK }          from './modules/mock_evaluation'
+include { MOCK_EVALUATION as AT_DADA2_PAIRED_MOCK }        from './modules/mock_evaluation'
+include { MOCK_EVALUATION as AT_DADA2_SINGLE_MOCK }        from './modules/mock_evaluation'
+include { MOCK_EVALUATION as AT_DEBLUR_MOCK }              from './modules/mock_evaluation'
+
 // ============================================================
 // CONSTANTS — all valid tool names per axis
 // ============================================================
@@ -179,7 +193,11 @@ workflow {
     // UNOISE - TO DO
 
 
-    // TAXONOMIC ASSIGNMENT + METASTANDARD
+    // TAXONOMIC ASSIGNMENT + METASTANDARD + MOCK EVALUATION
+    
+    // Reference files for mock evaluation
+    mock_abundance_file = params.mock_evaluation ? file(params.mock_abundance) : null
+    mock_taxa_file = params.mock_evaluation ? file(params.mock_taxa) : null
 
     // QIIME NAIVE BAYES
     if ('qnb' in workflowsToRun.classifiers) {
@@ -190,19 +208,26 @@ workflow {
         if ('deblur' in workflowsToRun.asv_tools) {
             QIIME_NAIVE_BAYES_DEBLUR(QIIME_DEBLUR.out.fasta,"deblur",qiime_NB_classifier)
             NB_DEBLUR_METASTANDARD(QIIME_DEBLUR.out.asv_table,QIIME_NAIVE_BAYES_DEBLUR.out,"NaiveBayes")
+            if (params.mock_evaluation) {
+                NB_DEBLUR_MOCK(NB_DEBLUR_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "deblur_NaiveBayes")
+            }
         }
 
         // DADA2
         if ('dada2_paired' in workflowsToRun.asv_tools) {
             QIIME_NAIVE_BAYES_DADA2_PAIRED(DADA2_PAIRED.out.fasta,"dada2_paired",qiime_NB_classifier)
             NB_DADA2_PAIRED_METASTANDARD(DADA2_PAIRED.out.asv_table,QIIME_NAIVE_BAYES_DADA2_PAIRED.out,"NaiveBayes")
-
+            if (params.mock_evaluation) {
+                NB_DADA2_PAIRED_MOCK(NB_DADA2_PAIRED_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2PE_NaiveBayes")
+            }
         } 
 
         if ('dada2_single' in workflowsToRun.asv_tools) {
             QIIME_NAIVE_BAYES_DADA2_SINGLE(DADA2_SINGLE.out.fasta,"dada2_single",qiime_NB_classifier)
             NB_DADA2_SINGLE_METASTANDARD(DADA2_SINGLE.out.asv_table,QIIME_NAIVE_BAYES_DADA2_SINGLE.out,"NaiveBayes")
-
+            if (params.mock_evaluation) {
+                NB_DADA2_SINGLE_MOCK(NB_DADA2_SINGLE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2SE_NaiveBayes")
+            }
         }
 
         // UNOISE - TO DO 
@@ -219,17 +244,26 @@ workflow {
         if ('deblur' in workflowsToRun.asv_tools) {
             QIIME_BLAST_DEBLUR(QIIME_DEBLUR.out.fasta,"deblur",qiime_BLAST_classifier_reads,qiime_BLAST_classifier_tax)
             BLAST_DEBLUR_METASTANDARD(QIIME_DEBLUR.out.asv_table,QIIME_BLAST_DEBLUR.out,"BLAST")
+            if (params.mock_evaluation) {
+                BLAST_DEBLUR_MOCK(BLAST_DEBLUR_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "deblur_BLAST")
+            }
         }
 
         // DADA2
         if ('dada2_paired' in workflowsToRun.asv_tools) {
             QIIME_BLAST_DADA2_PAIRED(DADA2_PAIRED.out.fasta,"dada2_paired", qiime_BLAST_classifier_reads, qiime_BLAST_classifier_tax)
             BLAST_DADA2_PAIRED_METASTANDARD(DADA2_PAIRED.out.asv_table,QIIME_BLAST_DADA2_PAIRED.out,"BLAST")
+            if (params.mock_evaluation) {
+                BLAST_DADA2_PAIRED_MOCK(BLAST_DADA2_PAIRED_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2PE_BLAST")
+            }
         }
 
         if ('dada2_single' in workflowsToRun.asv_tools) {
             QIIME_BLAST_DADA2_SINGLE(DADA2_SINGLE.out.fasta,"dada2_single", qiime_BLAST_classifier_reads, qiime_BLAST_classifier_tax)
             BLAST_DADA2_SINGLE_METASTANDARD(DADA2_SINGLE.out.asv_table,QIIME_BLAST_DADA2_SINGLE.out,"BLAST")
+            if (params.mock_evaluation) {
+                BLAST_DADA2_SINGLE_MOCK(BLAST_DADA2_SINGLE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2SE_BLAST")
+            }
         }
         // UNOISE - TO DO 
 
@@ -244,19 +278,26 @@ workflow {
         if ('deblur' in workflowsToRun.asv_tools) {
             IDTAXA_DEBLUR(QIIME_DEBLUR.out.fasta,"deblur",idtaxa_classifier)
             IDTAXA_DEBLUR_METASTANDARD(QIIME_DEBLUR.out.asv_table,IDTAXA_DEBLUR.out,"IDTAXA")
+            if (params.mock_evaluation) {
+                IDTAXA_DEBLUR_MOCK(IDTAXA_DEBLUR_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "deblur_IDTAXA")
+            }
         }
 
         // DADA2
         if ('dada2_paired' in workflowsToRun.asv_tools) {
             IDTAXA_DADA2_PAIRED(DADA2_PAIRED.out.fasta,"dada2_paired",idtaxa_classifier)
             IDTAXA_DADA2_PAIRED_METASTANDARD(DADA2_PAIRED.out.asv_table,IDTAXA_DADA2_PAIRED.out,"IDTAXA")
-
+            if (params.mock_evaluation) {
+                IDTAXA_DADA2_PAIRED_MOCK(IDTAXA_DADA2_PAIRED_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2PE_IDTAXA")
+            }
         }
 
         if ('dada2_single' in workflowsToRun.asv_tools) {
             IDTAXA_DADA2_SINGLE(DADA2_SINGLE.out.fasta,"dada2_single",idtaxa_classifier)
             IDTAXA_DADA2_SINGLE_METASTANDARD(DADA2_SINGLE.out.asv_table,IDTAXA_DADA2_SINGLE.out,"IDTAXA")
-
+            if (params.mock_evaluation) {
+                IDTAXA_DADA2_SINGLE_MOCK(IDTAXA_DADA2_SINGLE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2SE_IDTAXA")
+            }
         }
 
         // UNOISE - TO DO 
@@ -272,20 +313,26 @@ workflow {
         if ('deblur' in workflowsToRun.asv_tools) {
             ASSIGNTAXONOMY_DEBLUR(QIIME_DEBLUR.out.fasta,"deblur",assigntaxonomy_classifier)
             AT_DEBLUR_METASTANDARD(QIIME_DEBLUR.out.asv_table,ASSIGNTAXONOMY_DEBLUR.out,"AssignTaxonomy")
-
+            if (params.mock_evaluation) {
+                AT_DEBLUR_MOCK(AT_DEBLUR_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "deblur_AssignTaxonomy")
+            }
         }
 
         // DADA2
         if ('dada2_paired' in workflowsToRun.asv_tools) {
             ASSIGNTAXONOMY_DADA2_PAIRED(DADA2_PAIRED.out.fasta,"dada2_paired",assigntaxonomy_classifier)
             AT_DADA2_PAIRED_METASTANDARD(DADA2_PAIRED.out.asv_table,ASSIGNTAXONOMY_DADA2_PAIRED.out,"AssignTaxonomy")
-
+            if (params.mock_evaluation) {
+                AT_DADA2_PAIRED_MOCK(AT_DADA2_PAIRED_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2PE_AssignTaxonomy")
+            }
         }
 
         if ('dada2_single' in workflowsToRun.asv_tools) {
             ASSIGNTAXONOMY_DADA2_SINGLE(DADA2_SINGLE.out.fasta,"dada2_single",assigntaxonomy_classifier)
             AT_DADA2_SINGLE_METASTANDARD(DADA2_SINGLE.out.asv_table,ASSIGNTAXONOMY_DADA2_SINGLE.out,"AssignTaxonomy")
-
+            if (params.mock_evaluation) {
+                AT_DADA2_SINGLE_MOCK(AT_DADA2_SINGLE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2SE_AssignTaxonomy")
+            }
         }
 
         // UNOISE - TO DO 
