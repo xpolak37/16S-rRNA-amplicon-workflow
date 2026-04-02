@@ -38,30 +38,39 @@ include { DADA2_SINGLE }                       from './modules/dada2'
 include { MERGING_READS }               from './modules/se_preprocessing.nf'
 include { ORIENTING_READS }               from './modules/se_preprocessing.nf'
 include { QIIME_IMPORT; QIIME_DEBLUR }  from './modules/deblur.nf'
+include { VSEARCH_UNOISE3 }             from './modules/unoise.nf'
 include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_DADA2_PAIRED }  from './modules/tax_classifiers.nf'
 include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_DADA2_SINGLE }  from './modules/tax_classifiers.nf'
 include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_DEBLUR }  from './modules/tax_classifiers.nf'
+include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_UNOISE }  from './modules/tax_classifiers.nf'
 include { QIIME_BLAST as QIIME_BLAST_DADA2_PAIRED }  from './modules/tax_classifiers.nf'
 include { QIIME_BLAST as QIIME_BLAST_DADA2_SINGLE }  from './modules/tax_classifiers.nf'
 include { QIIME_BLAST as QIIME_BLAST_DEBLUR }  from './modules/tax_classifiers.nf'
+include { QIIME_BLAST as QIIME_BLAST_UNOISE }  from './modules/tax_classifiers.nf'
 include { IDTAXA as IDTAXA_DADA2_PAIRED }  from './modules/tax_classifiers.nf'
 include { IDTAXA as IDTAXA_DADA2_SINGLE }  from './modules/tax_classifiers.nf'
 include { IDTAXA as IDTAXA_DEBLUR }  from './modules/tax_classifiers.nf'
+include { IDTAXA as IDTAXA_UNOISE }  from './modules/tax_classifiers.nf'
 include { ASSIGNTAXONOMY as ASSIGNTAXONOMY_DADA2_PAIRED }  from './modules/tax_classifiers.nf'
 include { ASSIGNTAXONOMY as ASSIGNTAXONOMY_DADA2_SINGLE }  from './modules/tax_classifiers.nf'
 include { ASSIGNTAXONOMY as ASSIGNTAXONOMY_DEBLUR }  from './modules/tax_classifiers.nf'
+include { ASSIGNTAXONOMY as ASSIGNTAXONOMY_UNOISE }  from './modules/tax_classifiers.nf'
 include { METASTANDARD as NB_DADA2_PAIRED_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as NB_DADA2_SINGLE_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as NB_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
+include { METASTANDARD as NB_UNOISE_METASTANDARD }       from './modules/MetaStandard16S'
 include { METASTANDARD as BLAST_DADA2_PAIRED_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as BLAST_DADA2_SINGLE_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as BLAST_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
+include { METASTANDARD as BLAST_UNOISE_METASTANDARD }       from './modules/MetaStandard16S'
 include { METASTANDARD as IDTAXA_DADA2_PAIRED_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as IDTAXA_DADA2_SINGLE_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as IDTAXA_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
+include { METASTANDARD as IDTAXA_UNOISE_METASTANDARD }       from './modules/MetaStandard16S'
 include { METASTANDARD as AT_DADA2_PAIRED_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as AT_DADA2_SINGLE_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as AT_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
+include { METASTANDARD as AT_UNOISE_METASTANDARD }       from './modules/MetaStandard16S'
 
 // Mock community evaluation
 include { MOCK_EVALUATION as NB_DADA2_PAIRED_MOCK }        from './modules/mock_evaluation'
@@ -76,12 +85,16 @@ include { MOCK_EVALUATION as IDTAXA_DEBLUR_MOCK }          from './modules/mock_
 include { MOCK_EVALUATION as AT_DADA2_PAIRED_MOCK }        from './modules/mock_evaluation'
 include { MOCK_EVALUATION as AT_DADA2_SINGLE_MOCK }        from './modules/mock_evaluation'
 include { MOCK_EVALUATION as AT_DEBLUR_MOCK }              from './modules/mock_evaluation'
+include { MOCK_EVALUATION as NB_UNOISE_MOCK }              from './modules/mock_evaluation'
+include { MOCK_EVALUATION as BLAST_UNOISE_MOCK }           from './modules/mock_evaluation'
+include { MOCK_EVALUATION as IDTAXA_UNOISE_MOCK }          from './modules/mock_evaluation'
+include { MOCK_EVALUATION as AT_UNOISE_MOCK }              from './modules/mock_evaluation'
 
 // ============================================================
 // CONSTANTS — all valid tool names per axis
 // ============================================================
 
-def VALID_ASV        = ['dada2_paired','dada2_single', 'deblur']
+def VALID_ASV        = ['dada2_paired','dada2_single', 'deblur', 'unoise']
 def VALID_CLASSIFIER = ['qnb', 'qblast',"idtaxa","assigntaxonomy"]
 
 def resolveWorkflows(List validASV, List validClassifier) {
@@ -190,8 +203,14 @@ workflow {
         QIIME_DEBLUR(QIIME_IMPORT.out)
     }
 
-    // UNOISE - TO DO
+    // UNOISE3 (vsearch)
+    if ('unoise' in workflowsToRun.asv_tools) {
+        unoise_input = ORIENTING_READS.out.reads
+        .map { sample_id, reads -> reads }
+        .collect()
 
+        VSEARCH_UNOISE3(unoise_input)
+    }
 
     // TAXONOMIC ASSIGNMENT + METASTANDARD + MOCK EVALUATION
     
@@ -230,7 +249,14 @@ workflow {
             }
         }
 
-        // UNOISE - TO DO 
+        // UNOISE
+        if ('unoise' in workflowsToRun.asv_tools) {
+            QIIME_NAIVE_BAYES_UNOISE(VSEARCH_UNOISE3.out.fasta,"unoise",qiime_NB_classifier)
+            NB_UNOISE_METASTANDARD(VSEARCH_UNOISE3.out.asv_table,QIIME_NAIVE_BAYES_UNOISE.out,"NaiveBayes")
+            if (params.mock_evaluation) {
+                NB_UNOISE_MOCK(NB_UNOISE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "unoise_NaiveBayes")
+            }
+        }
 
     }
 
@@ -265,7 +291,14 @@ workflow {
                 BLAST_DADA2_SINGLE_MOCK(BLAST_DADA2_SINGLE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "dada2SE_BLAST")
             }
         }
-        // UNOISE - TO DO 
+        // UNOISE
+        if ('unoise' in workflowsToRun.asv_tools) {
+            QIIME_BLAST_UNOISE(VSEARCH_UNOISE3.out.fasta,"unoise",qiime_BLAST_classifier_reads,qiime_BLAST_classifier_tax)
+            BLAST_UNOISE_METASTANDARD(VSEARCH_UNOISE3.out.asv_table,QIIME_BLAST_UNOISE.out,"BLAST")
+            if (params.mock_evaluation) {
+                BLAST_UNOISE_MOCK(BLAST_UNOISE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "unoise_BLAST")
+            }
+        }
 
     }
 
@@ -300,7 +333,14 @@ workflow {
             }
         }
 
-        // UNOISE - TO DO 
+        // UNOISE
+        if ('unoise' in workflowsToRun.asv_tools) {
+            IDTAXA_UNOISE(VSEARCH_UNOISE3.out.fasta,"unoise",idtaxa_classifier)
+            IDTAXA_UNOISE_METASTANDARD(VSEARCH_UNOISE3.out.asv_table,IDTAXA_UNOISE.out,"IDTAXA")
+            if (params.mock_evaluation) {
+                IDTAXA_UNOISE_MOCK(IDTAXA_UNOISE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "unoise_IDTAXA")
+            }
+        }
 
     }
 
@@ -335,7 +375,14 @@ workflow {
             }
         }
 
-        // UNOISE - TO DO 
+        // UNOISE
+        if ('unoise' in workflowsToRun.asv_tools) {
+            ASSIGNTAXONOMY_UNOISE(VSEARCH_UNOISE3.out.fasta,"unoise",assigntaxonomy_classifier)
+            AT_UNOISE_METASTANDARD(VSEARCH_UNOISE3.out.asv_table,ASSIGNTAXONOMY_UNOISE.out,"AssignTaxonomy")
+            if (params.mock_evaluation) {
+                AT_UNOISE_MOCK(AT_UNOISE_METASTANDARD.out, mock_abundance_file, mock_taxa_file, "unoise_AssignTaxonomy")
+            }
+        }
 
     }
 
