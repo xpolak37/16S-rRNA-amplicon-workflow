@@ -19,6 +19,7 @@ process VSEARCH_UNOISE3 {
     vsearch --fastq_filter all_reads.fastq \
         --fastq_maxee ${params.unoise_maxee} \
         --fastq_minlen ${params.unoise_minlen} \
+        --fastq_qmax ${params.unoise_fastq_qmax} \
         --fastaout filtered.fasta \
         --threads ${task.cpus}
 
@@ -47,6 +48,7 @@ process VSEARCH_UNOISE3 {
     vsearch --usearch_global all_reads.fastq \
         --db ASV_sequences.fasta \
         --id ${params.unoise_id} \
+        --fastq_qmax ${params.unoise_fastq_qmax} \
         --otutabout otu_table_raw.tsv \
         --threads ${task.cpus}
 
