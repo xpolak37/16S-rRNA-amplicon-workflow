@@ -56,31 +56,20 @@ process VSEARCH_UNOISE3 {
         --otutabout otu_table_raw.tsv \
         --threads ${task.cpus}
 
-    # ── 8. Reformat: replace OTU IDs with actual sequences ──
-    python3 - <<'PYEOF'
-seqs = {}
-with open("ASV_sequences.fasta") as f:
-    header = None
-    for line in f:
-        line = line.strip()
-        if line.startswith(">"):
-            header = line[1:]
-        else:
-            seqs[header] = line
-
-with open("otu_table_raw.tsv") as f:
-    lines = f.readlines()
-
-with open("asv_table.tsv", "w") as out:
-    for line in lines:
-        if line.startswith("#"):
-            continue
-        fields = line.strip().split("\\t")
-        if fields[0] == "#OTU ID":
-            fields[0] = "SeqID"
-        elif fields[0] in seqs:
-            fields[0] = seqs[fields[0]]
-        out.write("\\t".join(fields) + "\\n")
-PYEOF
+    # ── 9. Reformat: replace ZOTU IDs with actual sequences ──
+    awk 'BEGIN{FS=OFS="\\t"}
+        # Pass 1: build header→sequence map from FASTA
+        NR==FNR {
+            if (substr(\$0,1,1)==">") { h=substr(\$0,2); next }
+            seqs[h]=seqs[h] \$0
+            next
+        }
+        # Pass 2: rewrite the OTU table
+        {
+            if (\$1=="#OTU ID") { \$1="SeqID" }
+            else if (\$1 in seqs) { \$1=seqs[\$1] }
+            print
+        }
+    ' ASV_sequences.fasta otu_table_raw.tsv > asv_table.tsv
     """
 }
