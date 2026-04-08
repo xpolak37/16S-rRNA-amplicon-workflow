@@ -44,11 +44,15 @@ process VSEARCH_UNOISE3 {
     # ── 6. Strip size annotations from ZOTU headers ──
     sed 's/;size=[0-9]*//' zotus.fasta > ASV_sequences.fasta
 
-    # ── 7. Map all reads back to ZOTUs to build an abundance table ──
-    vsearch --usearch_global all_reads.fastq \
+    # ── 7. Convert all reads to FASTA (usearch_global does not accept --fastq_qmax) ──
+    vsearch --fastx_filter all_reads.fastq \
+        --fastq_qmax ${params.unoise_fastq_qmax} \
+        --fastaout all_reads.fasta
+
+    # ── 8. Map all reads back to ZOTUs to build an abundance table ──
+    vsearch --usearch_global all_reads.fasta \
         --db ASV_sequences.fasta \
         --id ${params.unoise_id} \
-        --fastq_qmax ${params.unoise_fastq_qmax} \
         --otutabout otu_table_raw.tsv \
         --threads ${task.cpus}
 
