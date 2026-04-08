@@ -64,40 +64,56 @@ process CUSTOM_SUMMARY_BLAST {
         exit 0
     fi
 
-    set +e
-    timeout ${params.custom_summary_blast_timeout} blastn \\
-        -query ${fasta} \\
-        -db nt \\
-        -remote \\
-        -outfmt '6 qseqid ssaccver stitle bitscore' \\
-        -out blast_raw.tsv 2> blast.err
-    rc=\$?
-    set -e
+    # BLAST sequences one at a time so results are written continuously.
+    # A timeout or failure only loses the remaining sequences — any hits
+    # already written are preserved and included in the final report.
+    touch blast_hits.tsv
 
-    if [ \$rc -ne 0 ]; then
-        echo "BLAST_SKIPPED: blastn exited with status \$rc" > blast_hits.tsv
-        if [ -s blast.err ]; then
-            echo "---- blastn stderr ----" >> blast_hits.tsv
-            cat blast.err >> blast_hits.tsv
+    while IFS= read -r header || [ -n "\$header" ]; do
+        IFS= read -r seq || true
+        qid=\${header#>}
+
+        tmpfasta=\${qid}.fa
+        printf '>%s\\n%s\\n' "\$qid" "\$seq" > "\$tmpfasta"
+
+        set +e
+        timeout ${params.custom_summary_blast_timeout} blastn \\
+            -query "\$tmpfasta" \\
+            -db nt \\
+            -remote \\
+            -outfmt '6 qseqid ssaccver stitle bitscore' \\
+            -out "\${qid}_raw.tsv" 2>> blast.err
+        rc=\$?
+        set -e
+
+        rm -f "\$tmpfasta"
+
+        if [ \$rc -ne 0 ]; then
+            echo "[WARN] blastn for \$qid exited with status \$rc — skipping" >&2
+            continue
         fi
-        exit 0
-    fi
 
-    # Keep only the best hit per query (highest bitscore), matching the
-    # original script logic. Output: qseqid <tab> accession description
-    awk '
-    {
-        qid=\$1; acc=\$2; bs=\$NF
-        # stitle is everything between field 2 and the last field
-        stitle=""
-        for(i=3;i<NF;i++) stitle = stitle (i==3?"":OFS) \$i
-        if (!(qid in best) || bs > best[qid]) {
-            best[qid] = bs
-            line[qid] = qid "\\t" acc " " stitle
+        # Keep best hit (highest bitscore) for this query and append to results
+        awk -v qid="\$qid" '
+        {
+            bs=\$NF; acc=\$2
+            stitle=""
+            for(i=3;i<NF;i++) stitle = stitle (i==3?"":OFS) \$i
+            if (!(qid in best) || bs > best[qid]) {
+                best[qid] = bs
+                line[qid] = qid "\\t" acc " " stitle
+            }
         }
-    }
-    END { for (q in line) print line[q] }
-    ' blast_raw.tsv > blast_hits.tsv
+        END { if (qid in line) print line[qid] }
+        ' "\${qid}_raw.tsv" >> blast_hits.tsv
+
+        rm -f "\${qid}_raw.tsv"
+    done < ${fasta}
+
+    # If nothing was written at all, leave a note but don't fail
+    if [ ! -s blast_hits.tsv ]; then
+        echo "BLAST_SKIPPED: all sequences failed or produced no hits" > blast_hits.tsv
+    fi
     """
 }
 
