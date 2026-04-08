@@ -41,7 +41,8 @@ process CUSTOM_SUMMARY_PARSE {
     python3 ${projectDir}/bin/build_custom_summary.py parse \\
         --fastqc-dir fastqc_input \\
         --out-json fastqc_parsed.json \\
-        --out-fasta overrepresented.fasta
+        --out-fasta overrepresented.fasta \\
+        --max-blast-seqs ${params.custom_summary_blast_max_seqs}
     """
 }
 

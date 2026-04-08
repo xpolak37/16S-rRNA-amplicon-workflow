@@ -189,8 +189,9 @@ def cmd_parse(args):
         )
 
     all_adapters = set()
-    per_file_counts = []  # list of (filename, total_sequences)
-    overreps_dedup = OrderedDict()  # seq -> source/header
+    per_file_counts = []          # list of [filename, total_sequences]
+    overreps_source = {}          # seq -> first-seen FastQC source label
+    overreps_counts = {}          # seq -> cumulative count across all files
 
     for z in zips:
         try:
@@ -203,19 +204,38 @@ def cmd_parse(args):
             per_file_counts.append(
                 [parsed["filename"], parsed["total_sequences"]]
             )
-        for seq, _count, _pct, source in parsed["overreps"]:
-            if seq not in overreps_dedup:
-                overreps_dedup[seq] = source
+        for seq, count, _pct, source in parsed["overreps"]:
+            if seq not in overreps_source:
+                overreps_source[seq] = source
+            overreps_counts[seq] = overreps_counts.get(seq, 0) + count
+
+    # Sort by cumulative count descending so the most abundant sequences
+    # are first — this is the order used when applying the BLAST cap.
+    overreps_ranked = sorted(
+        overreps_source.keys(),
+        key=lambda s: overreps_counts[s],
+        reverse=True,
+    )
 
     payload = {
         "adapters": sorted(all_adapters),
         "per_file_counts": per_file_counts,
-        "overreps": [[seq, src] for seq, src in overreps_dedup.items()],
+        "overreps": [[seq, overreps_source[seq]] for seq in overreps_ranked],
     }
     args.out_json.write_text(json.dumps(payload, indent=2))
 
+    # The FASTA is only used for BLAST — cap at max_blast_seqs so we don't
+    # send hundreds of sequences to NCBI. The full list is still in the JSON
+    # and will appear in the report; only the top N will have BLAST hits.
+    blast_seqs = overreps_ranked[: args.max_blast_seqs]
+    if len(overreps_ranked) > args.max_blast_seqs:
+        sys.stderr.write(
+            f"[custom_summary] {len(overreps_ranked)} overrepresented sequences found; "
+            f"BLASTing top {args.max_blast_seqs} by abundance "
+            f"(set --max-blast-seqs to change).\n"
+        )
     with open(args.out_fasta, "w") as fh:
-        for i, seq in enumerate(overreps_dedup.keys()):
+        for i, seq in enumerate(blast_seqs):
             fh.write(f">orep_{i}\n{seq}\n")
 
 
@@ -513,6 +533,8 @@ def main():
     pp.add_argument("--fastqc-dir", required=True, type=Path)
     pp.add_argument("--out-json", required=True, type=Path)
     pp.add_argument("--out-fasta", required=True, type=Path)
+    pp.add_argument("--max-blast-seqs", type=int, default=50,
+                    help="Cap on sequences written to FASTA for BLAST (most abundant first).")
     pp.set_defaults(func=cmd_parse)
 
     pr = sub.add_parser("render", help="Render the HTML + raw txt summary")
