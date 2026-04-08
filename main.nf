@@ -30,7 +30,7 @@ log.info """\
 include { FASTQC as FASTQC_RAW }        from './modules/fastqc'
 include { FASTQC as FASTQC_TRIMMED }    from './modules/fastqc'
 include { MULTIQC }                     from './modules/multiqc'
-include { CUSTOM_SUMMARY }              from './modules/custom_summary'
+include { CUSTOM_SUMMARY_PARSE; CUSTOM_SUMMARY_BLAST; CUSTOM_SUMMARY_RENDER } from './modules/custom_summary'
 include { CUTADAPT }                    from './modules/cutadapt'
 include { HOST_REMOVAL }                    from './modules/hostile.nf'
 include { PHIX_REMOVAL }                    from './modules/hostile.nf'
@@ -397,7 +397,15 @@ workflow {
 
     // Custom per-run summary report (raw FastQC + optional remote BLAST)
     if (params.custom_summary) {
-        CUSTOM_SUMMARY(FASTQC_RAW.out.zip.collect())
+        CUSTOM_SUMMARY_PARSE(FASTQC_RAW.out.zip.collect())
+        if (params.custom_summary_blast) {
+            CUSTOM_SUMMARY_BLAST(CUSTOM_SUMMARY_PARSE.out.fasta)
+            blast_tsv_ch = CUSTOM_SUMMARY_BLAST.out.tsv
+        } else {
+            // Provide an empty placeholder so RENDER's input is satisfied
+            blast_tsv_ch = Channel.fromPath("${projectDir}/assets/empty_blast_hits.tsv")
+        }
+        CUSTOM_SUMMARY_RENDER(CUSTOM_SUMMARY_PARSE.out.json, blast_tsv_ch)
     }
 }
 

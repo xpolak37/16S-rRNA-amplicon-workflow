@@ -2,26 +2,28 @@
 """
 Build a custom QC summary report (raw txt + HTML) for a 16S pipeline run.
 
-Parses raw-read FastQC outputs to extract:
-  - Adapter types detected across samples
-  - Sequencing depth distribution (5-number summary + mean)
-  - Samples below a configurable read-count threshold
-  - Overrepresented sequences (deduped across samples)
+Two modes:
 
-Optionally runs a remote NCBI BLAST against `nt` on the overrepresented
-sequences so the user can verify they look like 16S bacterial sequences.
-The BLAST step is best-effort: if it fails (e.g. no internet, NCBI rate
-limit), the report is still produced and the BLAST section is marked as
-skipped instead of failing the pipeline.
+  parse   Read raw FastQC zip files and emit:
+            - a JSON blob with adapters, per-file read counts and the
+              deduped overrepresented sequences with their FastQC sources
+            - a FASTA file with the unique overrepresented sequences,
+              ready to feed into a remote BLAST step
+
+  render  Read the parse-mode JSON plus an (optionally empty) BLAST
+          hits TSV and emit both `raw_custom_summary.txt` (legacy plain
+          text format) and a styled `custom_summary.html` report.
+
+Splitting into two modes lets the parse/render steps run in a Python
+biocontainer while the BLAST step runs in a BLAST biocontainer — neither
+upstream image happens to ship both interpreters at once.
 """
 
 import argparse
 import html
-import os
+import json
 import statistics
-import subprocess
 import sys
-import tempfile
 import zipfile
 from collections import OrderedDict
 from pathlib import Path
@@ -143,7 +145,7 @@ def parse_fastqc_zip(zip_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Aggregation
+# Aggregation helpers
 # ---------------------------------------------------------------------------
 
 
@@ -175,70 +177,50 @@ def depth_summary(counts):
 
 
 # ---------------------------------------------------------------------------
-# Remote BLAST (best-effort)
+# Mode: parse
 # ---------------------------------------------------------------------------
 
 
-def run_remote_blast(sequences, workdir: Path, timeout_s: int):
-    """
-    Run remote blastn against nt for the given unique sequences.
-
-    Returns a dict {sequence: top_hit_title} or None on any failure.
-    """
-    if not sequences:
-        return {}
-
-    fasta = workdir / "overrepresented.fasta"
-    out_tsv = workdir / "blast_hits.tsv"
-    seq_to_id = {}
-    with open(fasta, "w") as fh:
-        for i, seq in enumerate(sequences):
-            qid = f"orep_{i}"
-            seq_to_id[seq] = qid
-            fh.write(f">{qid}\n{seq}\n")
-
-    cmd = [
-        "blastn",
-        "-query", str(fasta),
-        "-db", "nt",
-        "-remote",
-        "-max_target_seqs", "1",
-        "-outfmt", "6 qseqid stitle",
-        "-out", str(out_tsv),
-    ]
-    try:
-        subprocess.run(
-            cmd,
-            check=True,
-            timeout=timeout_s,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+def cmd_parse(args):
+    zips = sorted(args.fastqc_dir.glob("*_fastqc.zip"))
+    if not zips:
+        sys.stderr.write(
+            f"[custom_summary] No FastQC zips found in {args.fastqc_dir}\n"
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
-            FileNotFoundError, OSError) as exc:
-        sys.stderr.write(f"[custom_summary] Remote BLAST skipped: {exc}\n")
-        return None
 
-    id_to_seq = {v: k for k, v in seq_to_id.items()}
-    hits = {}
-    try:
-        with open(out_tsv) as fh:
-            for line in fh:
-                parts = line.rstrip("\n").split("\t", 1)
-                if len(parts) != 2:
-                    continue
-                qid, title = parts
-                seq = id_to_seq.get(qid)
-                if seq and seq not in hits:
-                    hits[seq] = title
-    except OSError as exc:
-        sys.stderr.write(f"[custom_summary] Could not read BLAST output: {exc}\n")
-        return None
-    return hits
+    all_adapters = set()
+    per_file_counts = []  # list of (filename, total_sequences)
+    overreps_dedup = OrderedDict()  # seq -> source/header
+
+    for z in zips:
+        try:
+            parsed = parse_fastqc_zip(z)
+        except Exception as exc:
+            sys.stderr.write(f"[custom_summary] Failed to parse {z}: {exc}\n")
+            continue
+        all_adapters.update(parsed["adapters"])
+        if parsed["total_sequences"] is not None:
+            per_file_counts.append(
+                [parsed["filename"], parsed["total_sequences"]]
+            )
+        for seq, _count, _pct, source in parsed["overreps"]:
+            if seq not in overreps_dedup:
+                overreps_dedup[seq] = source
+
+    payload = {
+        "adapters": sorted(all_adapters),
+        "per_file_counts": per_file_counts,
+        "overreps": [[seq, src] for seq, src in overreps_dedup.items()],
+    }
+    args.out_json.write_text(json.dumps(payload, indent=2))
+
+    with open(args.out_fasta, "w") as fh:
+        for i, seq in enumerate(overreps_dedup.keys()):
+            fh.write(f">orep_{i}\n{seq}\n")
 
 
 # ---------------------------------------------------------------------------
-# Output rendering
+# Mode: render
 # ---------------------------------------------------------------------------
 
 
@@ -452,86 +434,100 @@ def render_html(adapters, depth, overreps_unique, low_samples, threshold,
     )
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+def _load_blast_tsv(path: Path, expected_seqs):
+    """
+    Load a blastn -outfmt '6 qseqid stitle' style TSV.
 
-
-def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--fastqc-dir", required=True, type=Path,
-                   help="Directory containing raw FastQC *_fastqc.zip files.")
-    p.add_argument("--output-html", required=True, type=Path)
-    p.add_argument("--output-txt", required=True, type=Path)
-    p.add_argument("--threshold", type=int, default=10000,
-                   help="Sample read-count threshold for the low-coverage list.")
-    p.add_argument("--run-id", default="")
-    blast_group = p.add_mutually_exclusive_group()
-    blast_group.add_argument("--blast", dest="blast", action="store_true")
-    blast_group.add_argument("--no-blast", dest="blast", action="store_false")
-    p.set_defaults(blast=True)
-    p.add_argument("--blast-timeout", type=int, default=900,
-                   help="Seconds to wait for remote BLAST before skipping.")
-    args = p.parse_args()
-
-    zips = sorted(args.fastqc_dir.glob("*_fastqc.zip"))
-    if not zips:
-        sys.stderr.write(
-            f"[custom_summary] No FastQC zips found in {args.fastqc_dir}\n"
-        )
-
-    all_adapters = set()
-    per_file_counts = []  # list of (filename, total_sequences)
-    overreps_dedup = OrderedDict()  # seq -> source/header
-
-    for z in zips:
-        try:
-            parsed = parse_fastqc_zip(z)
-        except Exception as exc:
-            sys.stderr.write(f"[custom_summary] Failed to parse {z}: {exc}\n")
+    Returns a dict {sequence: top_hit_title}, or None if the file is
+    missing / contains the sentinel marker meaning the BLAST step was
+    skipped (no internet, etc.).
+    """
+    if path is None or not path.exists() or path.stat().st_size == 0:
+        return None
+    text = path.read_text()
+    # The blast process writes "BLAST_SKIPPED" if the remote call failed
+    # so we can distinguish "BLAST ran and produced zero hits" from
+    # "BLAST never ran successfully".
+    if text.strip().startswith("BLAST_SKIPPED"):
+        return None
+    id_to_seq = {f"orep_{i}": seq for i, seq in enumerate(expected_seqs)}
+    hits = {}
+    for line in text.splitlines():
+        parts = line.rstrip("\n").split("\t", 1)
+        if len(parts) != 2:
             continue
-        all_adapters.update(parsed["adapters"])
-        if parsed["total_sequences"] is not None:
-            per_file_counts.append((parsed["filename"], parsed["total_sequences"]))
-        for seq, count, pct, source in parsed["overreps"]:
-            if seq not in overreps_dedup:
-                overreps_dedup[seq] = source
+        qid, title = parts
+        seq = id_to_seq.get(qid)
+        if seq and seq not in hits:
+            hits[seq] = title
+    return hits
+
+
+def cmd_render(args):
+    payload = json.loads(args.in_json.read_text())
+    adapters = set(payload.get("adapters", []))
+    per_file_counts = [tuple(x) for x in payload.get("per_file_counts", [])]
+    overreps_unique = [tuple(x) for x in payload.get("overreps", [])]
 
     counts_only = [c for _, c in per_file_counts]
     depth = depth_summary(counts_only)
-
     low_samples = sorted(
         [(name, c) for name, c in per_file_counts if c < args.threshold],
         key=lambda x: (x[1], x[0]),
     )
 
-    overreps_unique = list(overreps_dedup.items())  # list of (seq, source)
-
-    blast_hits = None
-    if args.blast and overreps_unique:
-        with tempfile.TemporaryDirectory() as td:
-            blast_hits = run_remote_blast(
-                [s for s, _ in overreps_unique],
-                Path(td),
-                timeout_s=args.blast_timeout,
-            )
+    expected_seqs = [s for s, _ in overreps_unique]
+    blast_hits = _load_blast_tsv(args.blast_tsv, expected_seqs) if args.blast_attempted else None
 
     raw_txt = render_raw_txt(
-        all_adapters, depth, overreps_unique, low_samples, args.threshold
+        adapters, depth, overreps_unique, low_samples, args.threshold
     )
     args.output_txt.write_text(raw_txt)
 
     html_doc = render_html(
-        all_adapters,
+        adapters,
         depth,
         overreps_unique,
         low_samples,
         args.threshold,
         blast_hits,
-        blast_attempted=args.blast,
+        blast_attempted=args.blast_attempted,
         run_id=args.run_id,
     )
     args.output_html.write_text(html_doc)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    sub = p.add_subparsers(dest="mode", required=True)
+
+    pp = sub.add_parser("parse", help="Parse FastQC zips into JSON + FASTA")
+    pp.add_argument("--fastqc-dir", required=True, type=Path)
+    pp.add_argument("--out-json", required=True, type=Path)
+    pp.add_argument("--out-fasta", required=True, type=Path)
+    pp.set_defaults(func=cmd_parse)
+
+    pr = sub.add_parser("render", help="Render the HTML + raw txt summary")
+    pr.add_argument("--in-json", required=True, type=Path)
+    pr.add_argument("--blast-tsv", type=Path, default=None)
+    pr.add_argument("--output-html", required=True, type=Path)
+    pr.add_argument("--output-txt", required=True, type=Path)
+    pr.add_argument("--threshold", type=int, default=10000)
+    pr.add_argument("--run-id", default="")
+    blast_group = pr.add_mutually_exclusive_group()
+    blast_group.add_argument("--blast-attempted", dest="blast_attempted",
+                             action="store_true")
+    blast_group.add_argument("--no-blast-attempted", dest="blast_attempted",
+                             action="store_false")
+    pr.set_defaults(blast_attempted=True, func=cmd_render)
+
+    args = p.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":
