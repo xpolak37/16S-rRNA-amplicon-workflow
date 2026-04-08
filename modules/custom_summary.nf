@@ -69,9 +69,8 @@ process CUSTOM_SUMMARY_BLAST {
         -query ${fasta} \\
         -db nt \\
         -remote \\
-        -max_target_seqs 1 \\
-        -outfmt '6 qseqid stitle' \\
-        -out blast_hits.tsv 2> blast.err
+        -outfmt '6 qseqid ssaccver stitle bitscore' \\
+        -out blast_raw.tsv 2> blast.err
     rc=\$?
     set -e
 
@@ -81,7 +80,24 @@ process CUSTOM_SUMMARY_BLAST {
             echo "---- blastn stderr ----" >> blast_hits.tsv
             cat blast.err >> blast_hits.tsv
         fi
+        exit 0
     fi
+
+    # Keep only the best hit per query (highest bitscore), matching the
+    # original script logic. Output: qseqid <tab> accession description
+    awk '
+    {
+        qid=\$1; acc=\$2; bs=\$NF
+        # stitle is everything between field 2 and the last field
+        stitle=""
+        for(i=3;i<NF;i++) stitle = stitle (i==3?"":OFS) \$i
+        if (!(qid in best) || bs > best[qid]) {
+            best[qid] = bs
+            line[qid] = qid "\\t" acc " " stitle
+        }
+    }
+    END { for (q in line) print line[q] }
+    ' blast_raw.tsv > blast_hits.tsv
     """
 }
 

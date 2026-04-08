@@ -224,7 +224,7 @@ def cmd_parse(args):
 # ---------------------------------------------------------------------------
 
 
-def render_raw_txt(adapters, depth, overreps_unique, low_samples, threshold):
+def render_raw_txt(adapters, depth, overreps_unique, low_samples, threshold, blast_hits=None):
     lines = []
     lines.append("ADAPTER CONTENT:")
     for a in sorted(adapters):
@@ -239,7 +239,10 @@ def render_raw_txt(adapters, depth, overreps_unique, low_samples, threshold):
             f"{depth['mean']:>7.0f} {depth['q3']:>7.0f} {depth['max']:>7d} "
         )
     lines.append("OVERREPRESENTED SEQUENCES:")
-    for seq, header in overreps_unique:
+    for seq, fastqc_source in overreps_unique:
+        # Prefer the BLAST-derived header (accession + description) when
+        # available, falling back to the FastQC source label.
+        header = (blast_hits or {}).get(seq) or fastqc_source
         lines.append(f">{header}")
         lines.append(seq)
     lines.append(f"SAMPLES BELOW {threshold // 1000}k:")
@@ -480,7 +483,7 @@ def cmd_render(args):
     blast_hits = _load_blast_tsv(args.blast_tsv, expected_seqs) if args.blast_attempted else None
 
     raw_txt = render_raw_txt(
-        adapters, depth, overreps_unique, low_samples, args.threshold
+        adapters, depth, overreps_unique, low_samples, args.threshold, blast_hits
     )
     args.output_txt.write_text(raw_txt)
 
