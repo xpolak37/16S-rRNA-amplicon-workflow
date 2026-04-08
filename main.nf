@@ -30,6 +30,7 @@ log.info """\
 include { FASTQC as FASTQC_RAW }        from './modules/fastqc'
 include { FASTQC as FASTQC_TRIMMED }    from './modules/fastqc'
 include { MULTIQC }                     from './modules/multiqc'
+include { CUSTOM_SUMMARY }              from './modules/custom_summary'
 include { CUTADAPT }                    from './modules/cutadapt'
 include { HOST_REMOVAL }                    from './modules/hostile.nf'
 include { PHIX_REMOVAL }                    from './modules/hostile.nf'
@@ -393,6 +394,11 @@ workflow {
     
     // MultiQC aggregation
     MULTIQC(ch_multiqc_files.collect())
+
+    // Custom per-run summary report (raw FastQC + optional remote BLAST)
+    if (params.custom_summary) {
+        CUSTOM_SUMMARY(FASTQC_RAW.out.zip.collect())
+    }
 }
 
 /*
