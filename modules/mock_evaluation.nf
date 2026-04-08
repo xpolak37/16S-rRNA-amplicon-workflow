@@ -19,9 +19,9 @@ process MOCK_EVALUATION {
     val(workflow_id)  // e.g., "dada2PE_NaiveBayes"
 
     output:
-    path "*_barplot.png",      emit: barplot
-    path "*_metrics.tsv",      emit: metrics
-    path "*_composition.tsv",  emit: composition
+    path "*_barplot.png",      emit: barplot,     optional: true
+    path "*_metrics.tsv",      emit: metrics,     optional: true
+    path "*_composition.tsv",  emit: composition, optional: true
 
     script:
     def prefix = "${workflow_id}_mock"

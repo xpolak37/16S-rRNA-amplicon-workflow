@@ -359,8 +359,11 @@ def main():
     )
     
     if observed_df is None or len(mock_cols) == 0:
-        print("\nERROR: No mock samples found. Exiting.")
-        sys.exit(1)
+        print(
+            "\nNOTE: No mock samples found in this dataset — skipping mock "
+            "evaluation. This is not an error; the pipeline will continue."
+        )
+        sys.exit(0)
     
     # Calculate metrics for each mock sample
     print("\n" + "=" * 60)
