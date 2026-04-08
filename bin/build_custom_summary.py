@@ -294,7 +294,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border-bottom: 1px solid var(--border);
   }}
   th {{ background: #f0f4f8; }}
-  td.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+  td.num {{ text-align: left; font-variant-numeric: tabular-nums; }}
   .seq {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; word-break: break-all; }}
   .pill {{
     display: inline-block;
