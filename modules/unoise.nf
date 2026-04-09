@@ -10,9 +10,15 @@ process VSEARCH_UNOISE3 {
 
     script:
     """
-    # ── 1. Concatenate and decompress all oriented reads ──
+    # ── 1. Concatenate and decompress all oriented reads, labeling each read
+    #       with its sample name so vsearch --otutabout produces per-sample
+    #       columns (sample name = filename minus .fastq.gz suffix).
     for f in *.fastq.gz; do
-        gunzip -c "\$f"
+        sample=\$(basename "\$f" .fastq.gz)
+        gunzip -c "\$f" | awk -v s="\$sample" '
+            NR%4==1 { print "@" s "." substr(\$0,2); next }
+            { print }
+        '
     done > all_reads.fastq
 
     # ── 2. Quality filtering ──
@@ -41,10 +47,13 @@ process VSEARCH_UNOISE3 {
     vsearch --uchime3_denovo zotus_raw.fasta \
         --nonchimeras zotus.fasta
 
-    # ── 6. Strip size annotations from ZOTU headers ──
-    sed 's/;size=[0-9]*//' zotus.fasta > ASV_sequences.fasta
+    # ── 6. Assign simple ASV IDs (ASV1, ASV2, …) and strip size annotations.
+    #       Simple IDs ensure the FASTA headers match the OTU table row keys,
+    #       which in turn match what the taxonomy classifiers emit as SeqIDs.
+    awk '/^>/{print ">ASV" ++n; next}{print}' zotus.fasta \
+        | sed 's/;size=[0-9]*//' > ASV_sequences.fasta
 
-    # ── 7. Convert all reads to FASTA (usearch_global does not accept --fastq_qmax) ──
+    # ── 7. Convert labeled reads to FASTA for mapping ──
     vsearch --fastx_filter all_reads.fastq \
         --fastq_qmax ${params.unoise_fastq_qmax} \
         --fastaout all_reads.fasta
@@ -56,20 +65,10 @@ process VSEARCH_UNOISE3 {
         --otutabout otu_table_raw.tsv \
         --threads ${task.cpus}
 
-    # ── 9. Reformat: replace ZOTU IDs with actual sequences ──
+    # ── 9. Rename header column; ASV IDs are already the row keys ──
     awk 'BEGIN{FS=OFS="\\t"}
-        # Pass 1: build header→sequence map from FASTA
-        NR==FNR {
-            if (substr(\$0,1,1)==">") { h=substr(\$0,2); next }
-            seqs[h]=seqs[h] \$0
-            next
-        }
-        # Pass 2: rewrite the OTU table
-        {
-            if (\$1=="#OTU ID") { \$1="SeqID" }
-            else if (\$1 in seqs) { \$1=seqs[\$1] }
-            print
-        }
-    ' ASV_sequences.fasta otu_table_raw.tsv > asv_table.tsv
+        NR==1 { \$1="SeqID"; print; next }
+        { print }
+    ' otu_table_raw.tsv > asv_table.tsv
     """
 }
