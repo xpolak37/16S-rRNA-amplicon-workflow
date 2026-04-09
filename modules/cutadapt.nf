@@ -18,7 +18,6 @@ process CUTADAPT_DADA2_ORIENT {
     """
     # One cutadapt pass:
     #   -g ^R_primer / -G ^F_primer  anchored to 5' of R1 / R2 respectively
-    #   --discard-untrimmed          drops pairs where R_primer is NOT found on R1
     #   -o → rev_R2, -p → rev_R1    R1/R2 are intentionally swapped here so that
     #                                 rev_R1 = physical R2 (F-primer side) and
     #                                 rev_R2 = physical R1 (R-primer side), giving
@@ -28,7 +27,6 @@ process CUTADAPT_DADA2_ORIENT {
     cutadapt \\
         --cores ${task.cpus} \\
         -g ^${params.r_primer} -G ^${params.f_primer} \\
-        --discard-untrimmed \\
         -o ${sample_id}_rev_R2.fastq.gz \\
         -p ${sample_id}_rev_R1.fastq.gz \\
         --untrimmed-output ${sample_id}_fwd_R1.fastq.gz \\
