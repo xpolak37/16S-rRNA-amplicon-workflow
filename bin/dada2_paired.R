@@ -136,9 +136,13 @@ if (is.null(fwd$seqtab) && is.null(rev$seqtab)) {
 # mergeSequenceTables(..., repeats="sum") collapses identical ASVs that appear
 # in both orientation groups for the same sample.
 
-seqtab_all <- if      (is.null(fwd$seqtab)) rev$seqtab
-              else if (is.null(rev$seqtab)) fwd$seqtab
-              else mergeSequenceTables(fwd$seqtab, rev$seqtab, repeats = "sum")
+if (is.null(fwd$seqtab)) {
+  seqtab_all <- rev$seqtab
+} else if (is.null(rev$seqtab)) {
+  seqtab_all <- fwd$seqtab
+} else {
+  seqtab_all <- mergeSequenceTables(fwd$seqtab, rev$seqtab, repeats = "sum")
+}
 
 seqtab.nochim <- removeBimeraDenovo(
   seqtab_all, method = "consensus", multithread = nproc, verbose = FALSE
