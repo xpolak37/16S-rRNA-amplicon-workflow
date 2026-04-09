@@ -57,9 +57,11 @@ process CUSTOM_SUMMARY_BLAST {
 
     script:
     """
-    # Best-effort remote BLAST. If the FASTA is empty, or the network
-    # call fails for any reason (no internet, NCBI rate limit, timeout,
-    # …), we write a sentinel file instead of failing the pipeline.
+    # Point blastn at the local 16S_ribosomal_RNA database.
+    export BLASTDB="${params.blast_db_dir}"
+
+    # Best-effort local BLAST. If the FASTA is empty or blastn fails for
+    # any reason, we write a sentinel file instead of failing the pipeline.
     if [ ! -s ${fasta} ]; then
         echo "BLAST_SKIPPED: no overrepresented sequences" > blast_hits.tsv
         exit 0
@@ -80,8 +82,7 @@ process CUSTOM_SUMMARY_BLAST {
         set +e
         timeout ${params.custom_summary_blast_timeout} blastn \\
             -query "\$tmpfasta" \\
-            -db nt \\
-            -remote \\
+            -db 16S_ribosomal_RNA \\
             -outfmt '6 qseqid ssaccver stitle bitscore' \\
             -out "\${qid}_raw.tsv" 2>> blast.err
         rc=\$?

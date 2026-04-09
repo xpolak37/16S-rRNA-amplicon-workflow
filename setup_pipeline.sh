@@ -142,6 +142,7 @@ mkdir -p singularity_cache
 mkdir -p logs
 mkdir -p bowtie_phix
 mkdir -p hostile_index
+mkdir -p blast_db
 
 # Setup log file
 LOGFILE="${INSTALL_DIR}/logs/setup_$(date +%Y%m%d_%H%M%S).log"
@@ -172,7 +173,7 @@ log_success "All required tools are available"
 
 echo ""
 log_info "========================================="
-log_info "STEP 1/5: Downloading pre-built taxonomic classifiers"
+log_info "STEP 1/6: Downloading pre-built taxonomic classifiers"
 log_info "========================================="
 
 CLASSIFIERS_DIR="${INSTALL_DIR}/classifiers"
@@ -214,7 +215,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 2/5: Downloading Singularity containers"
+log_info "STEP 2/6: Downloading Singularity containers"
 log_info "========================================="
 
 SING_DIR="${INSTALL_DIR}/singularity_cache"
@@ -260,12 +261,40 @@ for img_name in "${!CONTAINERS[@]}"; do
 done
 
 #===============================================================================
+# DOWNLOAD BLAST 16S DATABASE
+#===============================================================================
+
+echo ""
+log_info "========================================="
+log_info "STEP 3/6: Downloading local BLAST 16S_ribosomal_RNA database"
+log_info "========================================="
+
+BLAST_DB_DIR="${INSTALL_DIR}/blast_db"
+cd "${BLAST_DB_DIR}"
+
+if ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
+    log_warn "16S_ribosomal_RNA BLAST database already present. Skipping."
+else
+    log_info "Downloading 16S_ribosomal_RNA database via update_blastdb.pl..."
+
+    singularity exec "${SING_DIR}/quay.io-biocontainers-blast-2.16.0--h66d330f_4.img" \
+        update_blastdb.pl --decompress 16S_ribosomal_RNA >> "${LOGFILE}" 2>&1
+
+    if [ $? -eq 0 ] && ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
+        log_success "16S_ribosomal_RNA database downloaded successfully"
+    else
+        log_error "Failed to download 16S_ribosomal_RNA database"
+        exit 1
+    fi
+fi
+
+#===============================================================================
 # BUILDING BOWTIE INDEXES
 #===============================================================================
 
 echo ""
 log_info "========================================="
-log_info "STEP 3/5: Building bowtie indexes"
+log_info "STEP 4/6: Building bowtie indexes"
 log_info "========================================="
 
 BOWTIE_DIR="${INSTALL_DIR}/bowtie_phix"
@@ -303,7 +332,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 4/5: Downloading human decontamination bowtie2 index"
+log_info "STEP 5/6: Downloading human decontamination bowtie2 index"
 log_info "========================================="
 
 HOSTILE_DIR="${INSTALL_DIR}/hostile_index"
@@ -340,7 +369,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 5/5: Downloading test dataset"
+log_info "STEP 6/6: Downloading test dataset"
 log_info "========================================="
 
 TEST_DIR="${PIPELINE_DIR}"
@@ -406,6 +435,7 @@ params {
     classifiers_dir    = '${INSTALL_DIR}/classifiers'
     bowtie_dir         = '${INSTALL_DIR}/bowtie_phix'
     hostile_index_dir  = '${INSTALL_DIR}/hostile_index'
+    blast_db_dir       = '${INSTALL_DIR}/blast_db'
 }
 EOF
 
