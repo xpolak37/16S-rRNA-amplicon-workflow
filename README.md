@@ -110,6 +110,8 @@ params {
     singularity_cache_dir     = '</path/to/your/installation/directory>/singularity_cache'  // Container images cache
     classifiers_dir = '</path/to/your/installation/directory>/classifiers' // path to your classifiers
     bowtie_dir = '</path/to/your/installation/directory>/bowtie_phix'
+    hostile_index_dir = './hostile_index' // path to pre-downloaded hostile human index
+    blast_db_dir = './blast_db' // path to local BLAST databases (16S_ribosomal_RNA)
 }
 ```
 
