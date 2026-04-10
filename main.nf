@@ -40,6 +40,7 @@ include { MERGING_READS }               from './modules/se_preprocessing.nf'
 include { ORIENTING_READS }               from './modules/se_preprocessing.nf'
 include { QIIME_IMPORT; QIIME_DEBLUR }  from './modules/deblur.nf'
 include { VSEARCH_UNOISE3 }             from './modules/unoise.nf'
+include { SEQTK_SUBSAMPLE }             from './modules/seqtk_subsample'
 include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_DADA2_PAIRED }  from './modules/tax_classifiers.nf'
 include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_DADA2_SINGLE }  from './modules/tax_classifiers.nf'
 include { QIIME_NAIVE_BAYES as QIIME_NAIVE_BAYES_DEBLUR }  from './modules/tax_classifiers.nf'
@@ -158,11 +159,19 @@ workflow {
     HOST_REMOVAL(CUTADAPT.out.reads, path_hostile_index)
     PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
 
+    // Optional subsampling for --quick mode
+    if (params.quick) {
+        SEQTK_SUBSAMPLE(PHIX_REMOVAL.out.reads)
+        ch_reads_for_asv = SEQTK_SUBSAMPLE.out.reads
+    } else {
+        ch_reads_for_asv = PHIX_REMOVAL.out.reads
+    }
+
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
         // Split each sample's reads by orientation so DADA2 learns separate
         // error models per orientation, then merges the ASV tables afterwards.
-        CUTADAPT_DADA2_ORIENT(PHIX_REMOVAL.out.reads)
+        CUTADAPT_DADA2_ORIENT(ch_reads_for_asv)
 
         dada2_input_paired = CUTADAPT_DADA2_ORIENT.out
             .map { sample_id, fwd_r1, fwd_r2, rev_r1, rev_r2 ->
@@ -177,7 +186,7 @@ workflow {
     def needs_merging = ['deblur', 'unoise','dada2_single']
 
     if (workflowsToRun.asv_tools.any { it in needs_merging }) {
-        MERGING_READS(PHIX_REMOVAL.out.reads)
+        MERGING_READS(ch_reads_for_asv)
     }
 
     // Orienting (only for tools that can have oriented reads)

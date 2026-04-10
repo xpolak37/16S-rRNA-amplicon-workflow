@@ -24,7 +24,10 @@ flowchart TB
     C --> D["FastQC on trimmed reads"] & E["Host removal (human + PhiX)\nBowtie2"]
     B --> CS["Custom Summary\n(overrepresented seqs + BLAST)"]
     D --> Z
-    E --> F["Merging reads"]
+    E --> QK{"--quick?"}
+    QK -- yes --> SS["Subsampling\nseqtk sample"]
+    QK -- no --> F
+    SS --> F["Merging reads"]
     F --> G["Orienting reads"]
     F --> H["DADA2 paired-end\n(split by orientation)"] & I["DADA2 single-end"]
     G --> J["Deblur via QIIME"]
@@ -61,6 +64,20 @@ During installation of prerequisites, the test dataset was download in the `test
 ```
 nextflow run main.nf --input test/test_samplesheet.csv --outdir results --all
 
+```
+
+**Quick mode (subsampling)**
+
+To rapidly iterate on parameters, use `--quick` to subsample reads before ASV inference (default: 1000 reads per sample):
+
+```
+nextflow run main.nf --input samplesheet.csv --outdir results_quick --quick
+```
+
+Adjust the subsampling depth with `--quick_depth`:
+
+```
+nextflow run main.nf --input samplesheet.csv --outdir results_quick --quick --quick_depth 5000
 ```
 
 ## 📦 Requirements
@@ -175,7 +192,10 @@ The 16S Profiling Pipeline is a modular Nextflow workflow designed for comprehen
 3. **Host and Contaminant Removal**  
    Reads originating from the host genome or common contaminants such as PhiX are removed using direct **Bowtie2** alignment against pre-built host and PhiX indexes, reducing false-positive ASVs and improving classification accuracy.
 
-4. **ASV Inference**  
+4. **Subsampling (optional)**  
+   When `--quick` is set, decontaminated reads are subsampled to a shallow depth (default: 1000 reads per sample) using **seqtk sample** before ASV inference. This allows fast parameter exploration without waiting for a full run. Subsampled FASTQ files are written to `results/subsampled/`.
+
+5. **ASV Inference**  
    The pipeline supports multiple ASV inference strategies:
    - **DADA2 paired-end** — reads are first split by orientation so DADA2 learns separate error models per strand, then ASV tables are merged
    - **DADA2 single-end**
@@ -184,7 +204,7 @@ The 16S Profiling Pipeline is a modular Nextflow workflow designed for comprehen
 
    Optional merging and orientation steps are applied where required (Deblur and UNOISE3 use SILVA-oriented reads; DADA2 paired-end uses orientation-split reads).
 
-5. **Taxonomic Assignment**  
+6. **Taxonomic Assignment**  
    Each ASV table can be classified using multiple classifiers:
    - **QIIME Naive Bayes**  
    - **QIIME BLAST**  
@@ -194,10 +214,10 @@ The 16S Profiling Pipeline is a modular Nextflow workflow designed for comprehen
 
 Each ASV_tool + Taxonomic_classifier pair will be then unified to standardized format  the **MetaStandard16S** module.
 
-6. **Custom Summary Report**  
+7. **Custom Summary Report**  
    A per-run HTML summary is generated from raw FastQC output. It reports key quality metrics and optionally BLASTs overrepresented sequences against the local `16S_ribosomal_RNA` BLAST database to flag potential contaminants or off-target amplification. BLAST runs with a configurable per-sequence timeout and saves results continuously so partial output is preserved if the step times out or is disabled.
 
-7. **Reporting and Aggregation**  
+8. **Reporting and Aggregation**  
    Quality metrics from all steps (raw reads, trimmed reads, ASV inference, and taxonomic classification) are aggregated with **MultiQC**, producing a comprehensive HTML report summarizing read quality, ASV statistics, and classification results.
 
 ### Key Features
@@ -307,6 +327,7 @@ results
 | `fastqc_trimmed/` | FastQC HTML & ZIP reports | Quality metrics for trimmed reads (after Cutadapt) |
 | `cutadapt/` | Trimmed FASTQ files | Reads after adapter and primer removal |
 | `hostile/` | Decontaminated FASTQ files | Reads after human and PhiX decontamination (Bowtie2) |
+| `subsampled/` | Subsampled FASTQ files | Reads downsampled to `--quick_depth` (only present when `--quick` is used) |
 | `dada2/` | ASV tables & FASTA sequences | DADA2 ASV inference outputs |
 | `bbmap/` | Merged FASTQ reads | Paired-end reads merged for Deblur/UNOISE |
 | `usearch_oriented/` | Oriented & merged FASTQ reads | Orientation-corrected reads for Deblur/UNOISE |
