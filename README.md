@@ -21,19 +21,23 @@ All parameters are set to work properly on specific data from our lab. Before an
 flowchart TB
     A["Input samplesheet"] --> B["FastQC on raw reads"]
     A --> C["Cutadapt trimming"] & Z["MultiQC"]
-    C --> D["FastQC on trimmed reads"] & E["Host removal (human + PHIX)"]
+    C --> D["FastQC on trimmed reads"] & E["Host removal (human + PhiX)\nBowtie2"]
+    B --> CS["Custom Summary\n(overrepresented seqs + BLAST)"]
     D --> Z
-    E --> F["Merging reads"] 
+    E --> F["Merging reads"]
     F --> G["Orienting reads"]
-    F --> H["DADA2 paired-end"] & I["DADA2 single-end"]  
+    F --> H["DADA2 paired-end\n(split by orientation)"] & I["DADA2 single-end"]
     G --> J["Deblur via QIIME"]
+    G --> K["UNOISE3 via VSEARCH"]
     H --> M["Naive Bayes"] & P["BLAST"] & S["IDTAXA"] & V["AssignTaxonomy"]
     I --> M & P & S & V
     J --> M & P & S & V
+    K --> M & P & S & V
     M --> Y["MetaStandard"]
     P --> Y
     S --> Y
     V --> Y
+    Y --> ME["Mock Community\nEvaluation"]
 ```
 
 ## 🚀 Quick Usage
@@ -103,8 +107,9 @@ Before running the pipeline, you should review this file and adjust the paramete
 * input/output locations
 * cache directories for containers and classifiers
 * primer sequences
-* DADA2 and Deblur filtering settings
+* DADA2, Deblur, and UNOISE3 filtering settings
 * taxonomic classification parameters
+* custom summary report and BLAST settings
 * resource allocation (CPU, memory, runtime)
 
 **How to modify parameters**
@@ -128,6 +133,31 @@ nextflow run main.nf \
 
 Command-line parameters always override values defined in `nextflow.config`.
 
+**UNOISE3 parameters** (in `nextflow.config`):
+
+```groovy
+params {
+    unoise_maxee        = 1.0   // Max expected errors for quality filtering
+    unoise_minlen       = 100   // Min sequence length after filtering
+    unoise_minsize      = 2     // Min abundance to retain a unique sequence
+    unoise_alpha        = 2.0   // UNOISE alpha parameter
+    unoise_id           = 0.97  // Identity threshold for mapping reads to ZOTUs
+    unoise_fastq_qmax   = 93    // Max FASTQ quality score (high for NovaSeq/NextSeq)
+}
+```
+
+**Custom summary parameters** (in `nextflow.config`):
+
+```groovy
+params {
+    custom_summary                 = true            // Enable/disable custom per-run summary
+    custom_summary_blast           = true            // BLAST overrepresented sequences (local 16S_ribosomal_RNA db)
+    custom_summary_blast_timeout   = 120             // Per-sequence BLAST timeout (seconds)
+    custom_summary_blast_max_seqs  = 50              // Max sequences to BLAST (most abundant first)
+    custom_summary_blast_db        = '16S_ribosomal_RNA'  // BLAST database name
+}
+```
+
 ---
 
 ## 🔬 Pipeline Description
@@ -143,14 +173,16 @@ The 16S Profiling Pipeline is a modular Nextflow workflow designed for comprehen
    Sequencing primers and adapters are removed using **Cutadapt**, generating trimmed reads for downstream analysis. Trimmed reads are re-evaluated with FastQC to ensure quality after trimming.
 
 3. **Host and Contaminant Removal**  
-   Reads originating from the host genome or common contaminants such as PhiX are removed using the **Hostile** tool and Bowtie2 indexes, reducing false-positive ASVs and improving classification accuracy.
+   Reads originating from the host genome or common contaminants such as PhiX are removed using direct **Bowtie2** alignment against pre-built host and PhiX indexes, reducing false-positive ASVs and improving classification accuracy.
 
 4. **ASV Inference**  
    The pipeline supports multiple ASV inference strategies:
-   - **DADA2 paired-end and single-end**  
-   - **Deblur via QIIME**  
-   
-   Optional merging and orientation steps are applied where required to ensure reads are properly prepared for ASV calling.
+   - **DADA2 paired-end** — reads are first split by orientation so DADA2 learns separate error models per strand, then ASV tables are merged
+   - **DADA2 single-end**
+   - **Deblur via QIIME**
+   - **UNOISE3 via VSEARCH** — de-novo chimera-free ZOTUs using the UNOISE3 algorithm
+
+   Optional merging and orientation steps are applied where required (Deblur and UNOISE3 use SILVA-oriented reads; DADA2 paired-end uses orientation-split reads).
 
 5. **Taxonomic Assignment**  
    Each ASV table can be classified using multiple classifiers:
@@ -162,7 +194,10 @@ The 16S Profiling Pipeline is a modular Nextflow workflow designed for comprehen
 
 Each ASV_tool + Taxonomic_classifier pair will be then unified to standardized format  the **MetaStandard16S** module.
 
-6. **Reporting and Aggregation**  
+6. **Custom Summary Report**  
+   A per-run HTML summary is generated from raw FastQC output. It reports key quality metrics and optionally BLASTs overrepresented sequences against the local `16S_ribosomal_RNA` BLAST database to flag potential contaminants or off-target amplification. BLAST runs with a configurable per-sequence timeout and saves results continuously so partial output is preserved if the step times out or is disabled.
+
+7. **Reporting and Aggregation**  
    Quality metrics from all steps (raw reads, trimmed reads, ASV inference, and taxonomic classification) are aggregated with **MultiQC**, producing a comprehensive HTML report summarizing read quality, ASV statistics, and classification results.
 
 ### Key Features
@@ -170,6 +205,8 @@ Each ASV_tool + Taxonomic_classifier pair will be then unified to standardized f
 - **Reproducible environments:** All tools are containerized with Singularity, ensuring consistent results across systems.
 - **Parameter flexibility:** All key parameters, including primer sequences, truncation lengths, and classifier paths, can be set in `nextflow.config` or overridden at runtime.
 - **Support for multiple ASV inference and taxonomic classification strategies**, enabling benchmarking and comparison of methods.
+- **Mock community evaluation:** Automatic comparison of observed vs. expected composition for mock samples, with Bray-Curtis dissimilarity, Pearson correlation, and RMSE metrics.
+- **Custom per-run summary:** Lightweight HTML report with overrepresented sequence BLAST hits to quickly flag contamination or primer issues before full analysis.
 
 ## 📥 Inputs
 
@@ -224,6 +261,13 @@ results
 │   ├── asv_table.tsv
 │   ├── dna-sequences.fasta
 │   └── stats.csv
+├── unoise
+│   ├── ASV_sequences.fasta
+│   ├── asv_table.tsv
+│   └── track_control.tsv
+├── custom_summary
+│   ├── custom_summary.html
+│   └── raw_custom_summary.txt
 ├── qnb
 │   ├── dada2_taxa_table.tsv
 │   └── deblur_taxa_table.tsv
@@ -262,11 +306,13 @@ results
 | `fastqc_raw/` | FastQC HTML & ZIP reports | Quality metrics for raw reads |
 | `fastqc_trimmed/` | FastQC HTML & ZIP reports | Quality metrics for trimmed reads (after Cutadapt) |
 | `cutadapt/` | Trimmed FASTQ files | Reads after adapter and primer removal |
-| `hostile/` | Decontaminated FASTQ files | Reads after human and phix decontamination (using hostile)  |
+| `hostile/` | Decontaminated FASTQ files | Reads after human and PhiX decontamination (Bowtie2) |
 | `dada2/` | ASV tables & FASTA sequences | DADA2 ASV inference outputs |
 | `bbmap/` | Merged FASTQ reads | Paired-end reads merged for Deblur/UNOISE |
-| `usearch_oriented/` | Oriented & merged FASTQ reads | Oriented reads for Deblur/UNOISE |
+| `usearch_oriented/` | Oriented & merged FASTQ reads | Orientation-corrected reads for Deblur/UNOISE |
 | `deblur/` | ASV tables & FASTA sequences | Deblur ASV inference outputs |
+| `unoise/` | ZOTU tables & FASTA sequences | UNOISE3 (VSEARCH) de-novo ZOTU inference outputs |
+| `custom_summary/` | HTML report & plain-text summary | Per-run quality summary with optional BLAST of overrepresented sequences |
 | `qnb/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using QIIME naive-bayes classifier |
 | `qblast/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using QIIME BLAST classifier |
 | `assigntaxonomy/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using DADA2 assignTaxonomy |
@@ -346,3 +392,4 @@ If you use this pipeline, please cite:
 - **DEBLUR:** Amir, A., et al. (2017). Deblur Rapidly Resolves Single-Nucleotide Community Sequence Patterns. mSystems, 2(2), e00191-16. 
 - **QIIME2:** Bolyen E, et al.(2019). Reproducible, interactive, scalable and extensible microbiome data science using QIIME 2. Nature Biotechnology 37: 852–857. 
 - **DECIPHER:** ES Wright (2024). Fast and Flexible Search for Homologous Biological Sequences with DECIPHER v3."The R Journal, 16(2), 191-200.
+- **VSEARCH:** Rognes, T., et al. (2016). VSEARCH: a versatile open source tool for metagenomics. PeerJ, 4, e2584.
