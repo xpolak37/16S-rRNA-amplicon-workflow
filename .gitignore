@@ -4,6 +4,7 @@ singularity_cache/
 bowtie_phix/
 hostile_index/
 logs/
+blast_db/
 
 # Nextflow working files
 work/
@@ -15,4 +16,5 @@ results/
 test/
 
 # Other materials
+pipeline_paths.config
 raw_custom_summary.txt
