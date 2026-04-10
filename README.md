@@ -165,6 +165,15 @@ params {
 }
 ```
 
+**MetaStandard parameters** (in `nextflow.config`):
+
+```groovy
+params {
+    tax_level          = "genus"  // Aggregation level: domain, phylum, class, order, family, genus, species, asv
+    metastandard_top_n = 10       // Top N taxa shown in stacked bar chart; rest collapsed to "Other"
+}
+```
+
 **Custom summary parameters** (in `nextflow.config`):
 
 ```groovy
@@ -214,7 +223,7 @@ The 16S Profiling Pipeline is a modular Nextflow workflow designed for comprehen
    - **AssignTaxonomy (DADA2)**  
    
 
-Each ASV_tool + Taxonomic_classifier pair will be then unified to standardized format  the **MetaStandard16S** module.
+Each ASV tool + classifier combination is unified into a standardised table by the **MetaStandard16S** module. The taxonomic level is controlled by the `tax_level` parameter (supported: `domain`, `phylum`, `class`, `order`, `family`, `genus`, `species`, `asv`). At `asv` level no aggregation is performed — each unique ASV sequence is kept as its own row with `TaxID = full_taxonomy|sequence`. Each MetaStandard output is then visualised automatically as a stacked bar chart and a clustered heatmap by **MetaStandard Plots**.
 
 7. **Custom Summary Report**  
    A per-run HTML summary is generated from raw FastQC output. It reports key quality metrics and optionally BLASTs overrepresented sequences against the local `16S_ribosomal_RNA` BLAST database to flag potential contaminants or off-target amplification. BLAST runs with a configurable per-sequence timeout and saves results continuously so partial output is preserved if the step times out or is disabled.
@@ -229,6 +238,8 @@ Each ASV_tool + Taxonomic_classifier pair will be then unified to standardized f
 - **Support for multiple ASV inference and taxonomic classification strategies**, enabling benchmarking and comparison of methods.
 - **Mock community evaluation:** Automatic comparison of observed vs. expected composition for mock samples, with Bray-Curtis dissimilarity, Pearson correlation, and RMSE metrics.
 - **Custom per-run summary:** Lightweight HTML report with overrepresented sequence BLAST hits to quickly flag contamination or primer issues before full analysis.
+- **MetaStandard plots:** Stacked bar chart (top 10 taxa + Other) and clustered heatmap generated automatically for every MetaStandard output table.
+- **Flexible taxonomic aggregation:** MetaStandard supports all ranks from domain to species, plus `asv` level to retain individual ASV sequences without aggregation.
 
 ## 📥 Inputs
 
@@ -303,10 +314,14 @@ results
 │   ├── dada2_taxa_table.tsv
 │   └── deblur_taxa_table.tsv
 ├── metastandard
-│   ├── dada2_AssignTaxonomy_runID_genus.tsv
-│   ├── dada2_BLAST_runID_genus.tsv
+│   ├── dada2PE_AssignTaxonomy_runID_genus.tsv
+│   ├── dada2PE_BLAST_runID_genus.tsv
 │   ├── deblur_AssignTaxonomy_runID_genus.tsv
 │   ├── deblur_BLAST_runID_genus.tsv
+│   └── ...
+├── metastandard_plots
+│   ├── dada2PE_AssignTaxonomy_runID_genus_barplot.png
+│   ├── dada2PE_AssignTaxonomy_runID_genus_heatmap.png
 │   └── ...
 ├── multiqc
 │   ├── multiqc_citations.txt
@@ -340,7 +355,8 @@ results
 | `qblast/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using QIIME BLAST classifier |
 | `assigntaxonomy/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using DADA2 assignTaxonomy |
 | `idtaxa/` | Taxa tables (DADA2 & Deblur) | Taxonomic assignment using DECIPHER IdTaxa |
-| `metastandard/` | Standardized output tables| Standardized outputs of all branches of workflows  (DADA2 & Deblur & QNB & QBLAST & assignTaxonomy & IdTaxa)  |
+| `metastandard/` | Standardized output tables | Unified relative-abundance tables for all ASV tool × classifier combinations, aggregated to `tax_level` |
+| `metastandard_plots/` | PNG plots per MetaStandard TSV | Stacked bar chart (top 10 taxa + Other) and clustered heatmap for each combination |
 | `mock_evaluation/` | Barplots, metrics, composition tables | Mock community evaluation comparing observed vs reference composition |
 | `multiqc/` | MultiQC reports & JSON/logs | Aggregated QC metrics from all tools and samples |
 | `pipeline_info/` | HTML, DAG, trace, timeline | Pipeline execution reports and workflow DAG |
