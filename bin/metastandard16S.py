@@ -163,8 +163,11 @@ def merge_taxa_genus(asv_table, taxa_table):
     # Get sample columns (everything after taxonomy rank columns)
     sample_cols = [col for col in merged.columns if col not in rank_prefixes]
     
-    # Group by genus level and sum counts
-    merged = merged.fillna(0)
+    # Fill taxonomy columns with "Unclassified" (not 0) so that ASVs with
+    # no taxonomy match don't produce spurious "d__0;p__0;..." TaxID keys.
+    # Fill count columns with 0 for taxonomy entries with no ASV counts.
+    merged[rank_prefixes] = merged[rank_prefixes].fillna("Unclassified")
+    merged[sample_cols] = merged[sample_cols].fillna(0)
     grouped = merged.groupby(rank_prefixes)[sample_cols].sum().reset_index()
     
     # Reconstruct taxonomy string with prefixes

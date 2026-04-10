@@ -82,7 +82,7 @@ process CUSTOM_SUMMARY_BLAST {
         set +e
         timeout ${params.custom_summary_blast_timeout} blastn \\
             -query "\$tmpfasta" \\
-            -db 16S_ribosomal_RNA \\
+            -db ${params.custom_summary_blast_db} \\
             -outfmt '6 qseqid ssaccver stitle bitscore' \\
             -out "\${qid}_raw.tsv" 2>> blast.err
         rc=\$?
@@ -140,6 +140,7 @@ process CUSTOM_SUMMARY_RENDER {
         --output-txt raw_custom_summary.txt \\
         --threshold ${params.min_reads_threshold} \\
         --run-id ${params.run_id} \\
+        --blast-db ${params.custom_summary_blast_db} \\
         ${attempted_flag}
     """
 }

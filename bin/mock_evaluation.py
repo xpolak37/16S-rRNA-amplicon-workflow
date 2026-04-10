@@ -92,28 +92,62 @@ def parse_args():
         default="run01",
         help="Run ID for labeling outputs"
     )
+    parser.add_argument(
+        "--synonyms",
+        default=None,
+        help="CSV file with old_name,canonical_name columns for genus name normalisation"
+    )
     return parser.parse_args()
 
 
-def load_reference_composition(abundance_path, taxa_path):
+def load_synonyms(path):
+    """
+    Load a two-column CSV (old_name, canonical_name) and return a dict
+    mapping every old name to its canonical equivalent.
+    Returns an empty dict if path is None or missing.
+    """
+    if path is None:
+        return {}
+    p = Path(path)
+    if not p.exists():
+        print(f"WARNING: synonyms file not found: {path}")
+        return {}
+    synonyms = {}
+    df = pd.read_csv(p)
+    for _, row in df.iterrows():
+        synonyms[row["name"].strip()] = row["canonical_name"].strip()
+    return synonyms
+
+
+def normalize_genus(genus, synonyms):
+    """Return the canonical name for a genus, or the genus itself if unknown."""
+    return synonyms.get(genus, genus)
+
+
+def load_reference_composition(abundance_path, taxa_path, synonyms=None):
     """
     Load mock reference files and aggregate to genus level.
-    
+
     Returns DataFrame with Genus as index and 'Reference' as column.
     """
+    synonyms = synonyms or {}
+
     # Load abundance and taxonomy
     abundance = pd.read_csv(abundance_path)
     taxa = pd.read_csv(taxa_path)
-    
+
     # Merge on ASV
     merged = pd.merge(abundance, taxa, on="ASV", how="left")
-    
+
+    # Normalize genus names using synonym dictionary
+    merged["Genus"] = merged["Genus"].apply(lambda g: normalize_genus(g, synonyms))
+
     # Aggregate to genus level
     genus_abundance = merged.groupby("Genus")["Mock Reference"].sum()
-    
+
     # Normalize to relative abundance (should already sum to 1, but ensure)
     genus_abundance = genus_abundance / genus_abundance.sum()
-    
+
     return genus_abundance.rename("Reference")
 
 
@@ -143,33 +177,36 @@ def identify_mock_samples(columns, pattern):
     return mock_cols
 
 
-def load_metastandard_table(path, mock_pattern):
+def load_metastandard_table(path, mock_pattern, synonyms=None):
     """
     Load MetaStandard output and filter to mock samples.
     Aggregate to genus level if needed.
     """
+    synonyms = synonyms or {}
     df = pd.read_csv(path, sep="\t")
-    
+
     # Identify mock samples
     sample_cols = [col for col in df.columns if col != "TaxID"]
     mock_cols = identify_mock_samples(sample_cols, mock_pattern)
-    
+
     if not mock_cols:
         print(f"WARNING: No mock samples found matching pattern '{mock_pattern}'")
         print(f"Available samples: {sample_cols}")
         return None, []
-    
+
     print(f"Found {len(mock_cols)} mock samples: {mock_cols}")
-    
-    # Extract genus from TaxID
-    df["Genus"] = df["TaxID"].apply(extract_genus_from_taxid)
-    
+
+    # Extract genus from TaxID and normalize via synonym dictionary
+    df["Genus"] = df["TaxID"].apply(extract_genus_from_taxid).apply(
+        lambda g: normalize_genus(g, synonyms)
+    )
+
     # Aggregate to genus level (sum abundances)
     genus_df = df.groupby("Genus")[mock_cols].sum()
-    
+
     # Normalize each sample to relative abundance
     genus_df = genus_df.div(genus_df.sum(axis=0), axis=1)
-    
+
     return genus_df, mock_cols
 
 
@@ -340,22 +377,28 @@ def main():
     print("Mock Community Evaluation")
     print("=" * 60)
     
+    # Load synonym dictionary
+    synonyms = load_synonyms(args.synonyms)
+    if synonyms:
+        print(f"Loaded {len(synonyms)} genus synonyms from: {args.synonyms}")
+
     # Load reference composition
     print(f"\nLoading reference composition from:")
     print(f"  Abundance: {args.mock_abundance}")
     print(f"  Taxonomy:  {args.mock_taxa}")
-    
-    reference = load_reference_composition(args.mock_abundance, args.mock_taxa)
+
+    reference = load_reference_composition(args.mock_abundance, args.mock_taxa, synonyms)
     print(f"\nReference composition (genus level):")
     print(reference.sort_values(ascending=False).to_string())
-    
+
     # Load MetaStandard table and extract mock samples
     print(f"\nLoading MetaStandard table: {args.metastandard_table}")
     print(f"Mock sample pattern: {args.mock_pattern}")
-    
+
     observed_df, mock_cols = load_metastandard_table(
         args.metastandard_table,
-        args.mock_pattern
+        args.mock_pattern,
+        synonyms
     )
     
     if observed_df is None or len(mock_cols) == 0:

@@ -364,7 +364,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 def render_html(adapters, depth, overreps_unique, low_samples, threshold,
-                blast_hits, blast_attempted, run_id):
+                blast_hits, blast_attempted, run_id, blast_db="16S_ribosomal_RNA"):
     title_suffix = f" — {run_id}" if run_id else ""
     meta_line = html.escape(f"Run ID: {run_id}" if run_id else "")
 
@@ -410,38 +410,36 @@ def render_html(adapters, depth, overreps_unique, low_samples, threshold,
     else:
         rows = []
         show_blast_col = blast_hits is not None
-        for seq, header in overreps_unique:
+        for seq, _fastqc_source in overreps_unique:
             blast_cell = ""
             if show_blast_col:
                 hit = blast_hits.get(seq, "")
                 blast_cell = f"<td>{html.escape(hit) if hit else '<span class=\"empty\">no hit</span>'}</td>"
             rows.append(
                 f"<tr><td class='seq'>{html.escape(seq)}</td>"
-                f"<td>{html.escape(header)}</td>"
                 f"{blast_cell}</tr>"
             )
-        header_cells = "<th>Sequence</th><th>Source (FastQC)</th>"
+        header_cells = "<th>Sequence</th>"
         if show_blast_col:
-            header_cells += "<th>Top BLAST hit (NCBI nt)</th>"
+            header_cells += f"<th>Top BLAST hit ({html.escape(blast_db)})</th>"
         overrep_block = (
             f"<table><thead><tr>{header_cells}</tr></thead>"
             f"<tbody>{''.join(rows)}</tbody></table>"
         )
 
     if not blast_attempted:
-        blast_status = "Remote BLAST disabled."
+        blast_status = "BLAST disabled."
     elif blast_hits is None:
         blast_status = (
-            "Remote BLAST against NCBI nt was attempted but failed "
-            "(likely no internet or NCBI unavailable). Step skipped — "
-            "report still produced."
+            f"BLAST against {blast_db} was attempted but failed. "
+            "Step skipped — report still produced."
         )
     elif not overreps_unique:
         blast_status = "Nothing to BLAST — no overrepresented sequences."
     else:
         n_hit = sum(1 for s, _ in overreps_unique if blast_hits.get(s))
         blast_status = (
-            f"Remote BLAST against NCBI nt: {n_hit}/{len(overreps_unique)} "
+            f"BLAST against {blast_db}: {n_hit}/{len(overreps_unique)} "
             "sequences have a top hit shown below."
         )
 
@@ -516,6 +514,7 @@ def cmd_render(args):
         blast_hits,
         blast_attempted=args.blast_attempted,
         run_id=args.run_id,
+        blast_db=args.blast_db,
     )
     args.output_html.write_text(html_doc)
 
@@ -544,6 +543,8 @@ def main():
     pr.add_argument("--output-txt", required=True, type=Path)
     pr.add_argument("--threshold", type=int, default=10000)
     pr.add_argument("--run-id", default="")
+    pr.add_argument("--blast-db", default="16S_ribosomal_RNA",
+                    help="Name of the BLAST database used (shown in the report).")
     blast_group = pr.add_mutually_exclusive_group()
     blast_group.add_argument("--blast-attempted", dest="blast_attempted",
                              action="store_true")

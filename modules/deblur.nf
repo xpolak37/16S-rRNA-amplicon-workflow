@@ -36,7 +36,7 @@ process QIIME_DEBLUR {
 
     output:
     path("asv_table.tsv"), emit: asv_table
-    path("dna-sequences.fasta"), emit: fasta
+    path("ASV_sequences.fasta"), emit: fasta
     path("stats.csv"), emit: stats
 
     script:
@@ -101,6 +101,10 @@ with open("asv_table.tsv", "w") as out:
         elif fields[0] in seqs:
             fields[0] = seqs[fields[0]]
         out.write("\\t".join(fields) + "\\n")
+
+with open("ASV_sequences.fasta", "w") as out_fasta:
+    for seq in seqs.values():
+        out_fasta.write(f">{seq}\\n{seq}\\n")
 EOF
     """
 }

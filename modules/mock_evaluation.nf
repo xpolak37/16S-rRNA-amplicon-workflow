@@ -16,6 +16,7 @@ process MOCK_EVALUATION {
     path(metastandard_table)
     path(mock_abundance)
     path(mock_taxa)
+    path(mock_synonyms)
     val(workflow_id)  // e.g., "dada2PE_NaiveBayes"
 
     output:
@@ -30,6 +31,7 @@ process MOCK_EVALUATION {
         --metastandard_table ${metastandard_table} \\
         --mock_abundance ${mock_abundance} \\
         --mock_taxa ${mock_taxa} \\
+        --synonyms ${mock_synonyms} \\
         --mock_pattern "${params.mock_pattern}" \\
         --output_prefix ${prefix} \\
         --top_n ${params.mock_top_n} \\
