@@ -148,8 +148,16 @@ workflow {
     // FastQC on raw reads
     FASTQC_RAW(ch_input_reads, "raw")
     
+    // Optional subsampling for --quick mode
+    if (params.quick) {
+        SEQTK_SUBSAMPLE(ch_input_reads)
+        ch_reads_for_cutadapt = SEQTK_SUBSAMPLE.out.reads
+    } else {
+        ch_reads_for_cutadapt = ch_input_reads
+    }
+
     // cutadapt for primer and adapter trimming
-    CUTADAPT(ch_input_reads)
+    CUTADAPT(ch_reads_for_cutadapt)
 
     // fastqc TRIMMED
     FASTQC_TRIMMED(CUTADAPT.out.reads, "trimmed")
@@ -160,19 +168,11 @@ workflow {
     HOST_REMOVAL(CUTADAPT.out.reads, path_hostile_index)
     PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
 
-    // Optional subsampling for --quick mode
-    if (params.quick) {
-        SEQTK_SUBSAMPLE(PHIX_REMOVAL.out.reads)
-        ch_reads_for_asv = SEQTK_SUBSAMPLE.out.reads
-    } else {
-        ch_reads_for_asv = PHIX_REMOVAL.out.reads
-    }
-
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
         // Split each sample's reads by orientation so DADA2 learns separate
         // error models per orientation, then merges the ASV tables afterwards.
-        CUTADAPT_DADA2_ORIENT(ch_reads_for_asv)
+        CUTADAPT_DADA2_ORIENT(PHIX_REMOVAL.out.reads)
 
         dada2_input_paired = CUTADAPT_DADA2_ORIENT.out
             .map { sample_id, fwd_r1, fwd_r2, rev_r1, rev_r2 ->
@@ -187,15 +187,14 @@ workflow {
     def needs_merging = ['deblur', 'unoise','dada2_single']
 
     if (workflowsToRun.asv_tools.any { it in needs_merging }) {
-        MERGING_READS(ch_reads_for_asv)
+        MERGING_READS(PHIX_REMOVAL.out.reads)
     }
 
     // Orienting (only for tools that can have oriented reads)
     def needs_orienting = ['deblur', 'unoise']
 
     if (workflowsToRun.asv_tools.any { it in needs_merging }) {
-        // TO DO - new orienting db
-        orienting_db=file(params.classifiers_dir + "/silva_nrr99_v138.1_orienting.udb")
+        orienting_db=file(params.classifiers_dir + "/silva_nr99_v138.2_orienting.udb")
         ORIENTING_READS(MERGING_READS.out.reads,orienting_db)
     }
 

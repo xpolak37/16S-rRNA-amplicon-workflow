@@ -284,7 +284,7 @@ else
         log_success "16S_ribosomal_RNA database downloaded successfully"
     else
         log_error "Failed to download 16S_ribosomal_RNA database"
-        exit 1
+        # exit 1
     fi
 fi
 
@@ -311,7 +311,10 @@ else
         
         log_info "Building bowtie indexes for phiX174 genome..."
 
-        singularity exec ${SING_DIR}/quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img bowtie2-build phiX174.fasta phiX174
+        singularity exec \
+        --bind ${INSTALL_DIR}:/${INSTALL_DIR} \
+        ${SING_DIR}/quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img \
+        bowtie2-build phiX174.fasta phiX174
 
         if [ -f "phiX174.1.bt2" ]; then
             log_success "Indexes built succesfully"
