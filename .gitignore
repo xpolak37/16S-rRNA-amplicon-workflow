@@ -18,3 +18,4 @@ test/
 # Other materials
 pipeline_paths.config
 raw_custom_summary.txt
+test_blastdb_setup.sh

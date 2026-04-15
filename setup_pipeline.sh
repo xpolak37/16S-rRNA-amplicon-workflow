@@ -277,10 +277,11 @@ if ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
 else
     log_info "Downloading 16S_ribosomal_RNA database via update_blastdb.pl..."
 
-    singularity exec "${SING_DIR}/quay.io-biocontainers-blast-2.16.0--h66d330f_4.img" \
+    singularity exec --bind "${BLAST_DB_DIR}:${BLAST_DB_DIR}" --pwd "${BLAST_DB_DIR}" \
+        "${SING_DIR}/quay.io-biocontainers-blast-2.16.0--h66d330f_4.img" \
         update_blastdb.pl --decompress 16S_ribosomal_RNA >> "${LOGFILE}" 2>&1
 
-    if [ $? -eq 0 ] && ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
+    if ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
         log_success "16S_ribosomal_RNA database downloaded successfully"
     else
         log_error "Failed to download 16S_ribosomal_RNA database"
