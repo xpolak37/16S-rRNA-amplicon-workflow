@@ -73,7 +73,7 @@ include { METASTANDARD as AT_DADA2_PAIRED_METASTANDARD }        from './modules/
 include { METASTANDARD as AT_DADA2_SINGLE_METASTANDARD }        from './modules/MetaStandard16S'
 include { METASTANDARD as AT_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
 include { METASTANDARD as AT_UNOISE_METASTANDARD }       from './modules/MetaStandard16S'
-include { METASTANDARD_PLOTS }                           from './modules/metastandard_plots'
+include { METASTANDARD_PLOTS; METASTANDARD_COMPARE; METASTANDARD_DIVERSITY; METASTANDARD_AGREEMENT; METASTANDARD_REPORT } from './modules/metastandard_plots'
 
 // Mock community evaluation
 include { MOCK_EVALUATION as NB_DADA2_PAIRED_MOCK }        from './modules/mock_evaluation'
@@ -423,6 +423,33 @@ workflow {
 
     // Plot all metastandard outputs (one job per TSV)
     METASTANDARD_PLOTS(ch_metastandard_plots)
+
+    // Cross-method comparison (all TSVs at once)
+    METASTANDARD_COMPARE(ch_metastandard_plots.collect())
+
+    // Alpha/beta diversity summary (all TSVs at once)
+    METASTANDARD_DIVERSITY(ch_metastandard_plots.collect())
+
+    // Classifier agreement metrics (all TSVs at once)
+    METASTANDARD_AGREEMENT(ch_metastandard_plots.collect())
+
+    // HTML dashboard — collect all plots and tables from upstream processes
+    ch_report_files = Channel.empty()
+    ch_report_files = ch_report_files.mix(
+        METASTANDARD_PLOTS.out.barplot,
+        METASTANDARD_PLOTS.out.heatmap,
+        METASTANDARD_COMPARE.out.barplots.flatten(),
+        METASTANDARD_COMPARE.out.heatmaps.flatten(),
+        METASTANDARD_COMPARE.out.consensus,
+        METASTANDARD_DIVERSITY.out.alpha_plot,
+        METASTANDARD_DIVERSITY.out.alpha_table,
+        METASTANDARD_DIVERSITY.out.pcoa_plot,
+        METASTANDARD_AGREEMENT.out.jaccard_heatmaps.flatten(),
+        METASTANDARD_AGREEMENT.out.completeness_plot,
+        METASTANDARD_AGREEMENT.out.completeness_table,
+        METASTANDARD_AGREEMENT.out.summary,
+    )
+    METASTANDARD_REPORT(ch_report_files.collect())
 
     // Collect all QC files for MultiQC
     ch_multiqc_files = Channel.empty()
