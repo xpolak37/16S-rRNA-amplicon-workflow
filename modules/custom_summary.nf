@@ -47,6 +47,7 @@ process CUSTOM_SUMMARY_PARSE {
 }
 
 process CUSTOM_SUMMARY_BLAST {
+    containerOptions "--bind ${params.blast_db_dir}"
     publishDir "${params.outdir}/custom_summary", mode: 'copy', pattern: 'blast_hits.tsv'
 
     input:
