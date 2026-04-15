@@ -155,6 +155,7 @@ def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
     height = max(6, len(data) * 0.3)
     width  = max(5, len(data.columns) * 0.8)
 
+    sys.setrecursionlimit(10000)
     g = sns.clustermap(
         data,
         row_cluster=row_cluster,
