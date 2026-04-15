@@ -209,13 +209,18 @@ def cmd_parse(args):
                 overreps_source[seq] = source
             overreps_counts[seq] = overreps_counts.get(seq, 0) + count
 
-    # Sort by cumulative count descending so the most abundant sequences
-    # are first — this is the order used when applying the BLAST cap.
+    # Sort by cumulative count descending and keep only the top N.
     overreps_ranked = sorted(
         overreps_source.keys(),
         key=lambda s: overreps_counts[s],
         reverse=True,
-    )
+    )[: args.top_overreps]
+
+    if len(overreps_source) > args.top_overreps:
+        sys.stderr.write(
+            f"[custom_summary] {len(overreps_source)} overrepresented sequences found; "
+            f"keeping top {args.top_overreps} by abundance.\n"
+        )
 
     payload = {
         "adapters": sorted(all_adapters),
@@ -224,18 +229,8 @@ def cmd_parse(args):
     }
     args.out_json.write_text(json.dumps(payload, indent=2))
 
-    # The FASTA is only used for BLAST — cap at max_blast_seqs so we don't
-    # send hundreds of sequences to NCBI. The full list is still in the JSON
-    # and will appear in the report; only the top N will have BLAST hits.
-    blast_seqs = overreps_ranked[: args.max_blast_seqs]
-    if len(overreps_ranked) > args.max_blast_seqs:
-        sys.stderr.write(
-            f"[custom_summary] {len(overreps_ranked)} overrepresented sequences found; "
-            f"BLASTing top {args.max_blast_seqs} by abundance "
-            f"(set --max-blast-seqs to change).\n"
-        )
     with open(args.out_fasta, "w") as fh:
-        for i, seq in enumerate(blast_seqs):
+        for i, seq in enumerate(overreps_ranked):
             fh.write(f">orep_{i}\n{seq}\n")
 
 
@@ -532,8 +527,8 @@ def main():
     pp.add_argument("--fastqc-dir", required=True, type=Path)
     pp.add_argument("--out-json", required=True, type=Path)
     pp.add_argument("--out-fasta", required=True, type=Path)
-    pp.add_argument("--max-blast-seqs", type=int, default=50,
-                    help="Cap on sequences written to FASTA for BLAST (most abundant first).")
+    pp.add_argument("--top-overreps", type=int, default=10,
+                    help="Top N overrepresented sequences to include in report and BLAST (most abundant first).")
     pp.set_defaults(func=cmd_parse)
 
     pr = sub.add_parser("render", help="Render the HTML + raw txt summary")

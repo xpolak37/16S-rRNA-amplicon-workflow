@@ -42,7 +42,7 @@ process CUSTOM_SUMMARY_PARSE {
         --fastqc-dir fastqc_input \\
         --out-json fastqc_parsed.json \\
         --out-fasta overrepresented.fasta \\
-        --max-blast-seqs ${params.custom_summary_blast_max_seqs}
+        --top-overreps ${params.custom_summary_top_overreps}
     """
 }
 
