@@ -184,7 +184,7 @@ if [ -f "silva-138.2-ssu-nr99-341F-805R-classifier.qza" ]; then
 else
     log_info "Downloading classifiers from Zenodo..."
     
-    wget "https://filesender.cesnet.cz/download.php?token=a1fbed9f-128d-4353-ab69-62d15298aa2d&files_ids=831961" \
+    wget "https://zenodo.org/records/19063716/files/classifiers.tar.gz?download=1" \
         -O classifiers.tar.gz 2>&1 | tee -a "${LOGFILE}"
     
     if [ $? -eq 0 ]; then
@@ -384,7 +384,7 @@ if [ -f "test/SRR13005968-test_2.fastq.gz" ]; then
 else
     log_info "Downloading test data from Zenodo..."
     
-    wget "https://filesender.cesnet.cz/download.php?token=323bf327-a8a5-4ec2-b82c-0c9026388202&files_ids=836539" \
+    wget "https://zenodo.org/records/19590697/files/test.zip?download=1" \
         -O test.zip 2>&1 | tee -a "${LOGFILE}"
     
     if [ $? -eq 0 ]; then
