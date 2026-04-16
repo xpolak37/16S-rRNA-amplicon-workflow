@@ -30,6 +30,10 @@ from scipy.spatial.distance import braycurtis
 # Rank order (same as plot_metastandard.py)
 RANKS = ["d", "p", "c", "o", "f", "g", "s"]
 
+# Maximum number of samples for which individual per-sample plots are produced.
+# Beyond this, only the first MAX_PLOT_SAMPLES are plotted and a note is printed.
+MAX_PLOT_SAMPLES = 20
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,6 +110,12 @@ def plot_grouped_barplot(long_df: pd.DataFrame, top_n: int, outdir: Path):
     methods = sorted(long_df["method"].unique())
     samples = sorted(long_df["sample"].unique())
 
+    if len(samples) > MAX_PLOT_SAMPLES:
+        print(f"Note: {len(samples)} samples detected; plotting first "
+              f"{MAX_PLOT_SAMPLES} of {len(samples)} for cross-method barplots.",
+              file=sys.stderr)
+        samples = samples[:MAX_PLOT_SAMPLES]
+
     # Global top N taxa by mean abundance across all methods and samples
     mean_abund = long_df.groupby("taxon")["abundance"].mean().sort_values(ascending=False)
     top_taxa = mean_abund.index[:top_n].tolist()
@@ -177,7 +187,14 @@ def plot_bray_curtis_heatmap(method_data: dict, outdir: Path):
     first_df = next(iter(method_data.values()))
     sample_cols = [c for c in first_df.columns if c != "TaxID"]
 
-    for sample in sample_cols:
+    plot_samples = sample_cols
+    if len(sample_cols) > MAX_PLOT_SAMPLES:
+        print(f"Note: {len(sample_cols)} samples detected; plotting first "
+              f"{MAX_PLOT_SAMPLES} of {len(sample_cols)} for Bray-Curtis heatmaps.",
+              file=sys.stderr)
+        plot_samples = sample_cols[:MAX_PLOT_SAMPLES]
+
+    for sample in plot_samples:
         # Build abundance vectors (taxa × methods), aligned to all_taxa
         vectors = {}
         for method in methods:
@@ -193,7 +210,12 @@ def plot_bray_curtis_heatmap(method_data: dict, outdir: Path):
         dist_matrix = np.zeros((n, n))
         for i in range(n):
             for j in range(i + 1, n):
-                d = braycurtis(vectors[methods[i]], vectors[methods[j]])
+                vi, vj = vectors[methods[i]], vectors[methods[j]]
+                # Guard against zero vectors (braycurtis returns NaN for all-zeros)
+                if vi.sum() == 0 or vj.sum() == 0:
+                    d = 1.0  # maximally dissimilar if one side has no data
+                else:
+                    d = braycurtis(vi, vj)
                 dist_matrix[i, j] = d
                 dist_matrix[j, i] = d
 
@@ -229,29 +251,42 @@ def build_consensus_table(method_data: dict, threshold: float, outdir: Path):
         all_taxa.update(df["TaxID"].tolist())
     all_taxa = sorted(all_taxa)
 
-    # For each sample, count methods detecting each taxon
+    # Build a presence/absence matrix per method (vectorised, avoids O(n^3) loop)
+    # For each method, create a DataFrame indexed by TaxID with boolean columns
+    method_presence = {}
+    for method in methods:
+        df = method_data[method].set_index("TaxID")
+        # Reindex to all taxa, fill missing with 0
+        df = df.reindex(all_taxa, fill_value=0.0)
+        method_presence[method] = df[sample_cols] > threshold
+
+    # Build consensus counts
     results = []
+    many_samples = len(sample_cols) > MAX_PLOT_SAMPLES
+
     for taxid in all_taxa:
         label = extract_base_label(taxid)
         row = {"TaxID": taxid, "label": label}
+        total = 0
         for sample in sample_cols:
-            count = 0
-            detecting_methods = []
-            for method in methods:
-                df = method_data[method]
-                match = df[df["TaxID"] == taxid]
-                if len(match) > 0 and match[sample].values[0] > threshold:
-                    count += 1
-                    detecting_methods.append(method)
-            row[f"{sample}_count"] = count
-            row[f"{sample}_methods"] = ";".join(detecting_methods) if detecting_methods else "none"
+            detecting = [m for m in methods if method_presence[m].loc[taxid, sample]]
+            count = len(detecting)
+            total += count
+            # Only include per-sample columns when sample count is manageable
+            if not many_samples:
+                row[f"{sample}_count"] = count
+                row[f"{sample}_methods"] = ";".join(detecting) if detecting else "none"
+        row["total_detections"] = total
+        # With many samples, add aggregate stats instead of per-sample columns
+        if many_samples:
+            row["mean_methods_per_sample"] = round(total / len(sample_cols), 2)
+            row["samples_detected_in"] = sum(
+                1 for s in sample_cols
+                if any(method_presence[m].loc[taxid, s] for m in methods)
+            )
         results.append(row)
 
     consensus_df = pd.DataFrame(results)
-
-    # Add summary: total detections across all samples
-    count_cols = [c for c in consensus_df.columns if c.endswith("_count")]
-    consensus_df["total_detections"] = consensus_df[count_cols].sum(axis=1)
     consensus_df = consensus_df.sort_values("total_detections", ascending=False)
 
     consensus_df.to_csv(outdir / "consensus_table.tsv", sep="\t", index=False)

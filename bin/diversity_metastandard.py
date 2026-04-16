@@ -26,11 +26,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.spatial.distance import braycurtis
+from scipy.spatial.distance import braycurtis, pdist, squareform
 
 
 # Rank order (same as other metastandard scripts)
 RANKS = ["d", "p", "c", "o", "f", "g", "s"]
+
+# Maximum method×sample combinations for PCoA.  Beyond this, a random subset
+# of samples is drawn so the distance matrix stays tractable.
+MAX_PCOA_POINTS = 500
 
 
 # ---------------------------------------------------------------------------
@@ -184,15 +188,27 @@ def plot_pcoa(method_data: dict, outdir: Path):
     first_df = next(iter(method_data.values()))
     sample_cols = [c for c in first_df.columns if c != "TaxID"]
 
-    # Build abundance vectors: one per method×sample
+    # If methods × samples exceeds MAX_PCOA_POINTS, subsample samples
+    n_total = len(methods) * len(sample_cols)
+    pcoa_samples = sample_cols
+    if n_total > MAX_PCOA_POINTS:
+        max_per_method = MAX_PCOA_POINTS // len(methods)
+        max_per_method = max(2, max_per_method)  # keep at least 2
+        rng = np.random.default_rng(42)
+        pcoa_samples = sorted(rng.choice(sample_cols, size=min(max_per_method, len(sample_cols)), replace=False))
+        print(f"Note: {n_total} method×sample points would be too large for PCoA; "
+              f"subsampled to {len(pcoa_samples)} samples ({len(methods) * len(pcoa_samples)} points).",
+              file=sys.stderr)
+
+    # Build abundance matrix: rows = method×sample combinations, cols = taxa
     labels_method = []
     labels_sample = []
-    vectors = []
+    matrix_rows = []
 
     for method in methods:
         df = method_data[method]
         series = df.set_index("TaxID").reindex(all_taxa, fill_value=0.0)
-        for sample in sample_cols:
+        for sample in pcoa_samples:
             if sample in series.columns:
                 vec = series[sample].values.astype(float)
             else:
@@ -201,22 +217,28 @@ def plot_pcoa(method_data: dict, outdir: Path):
             total = vec.sum()
             if total > 0:
                 vec = vec / total
-            vectors.append(vec)
+            matrix_rows.append(vec)
             labels_method.append(method)
             labels_sample.append(sample)
 
-    n = len(vectors)
+    n = len(matrix_rows)
     if n < 3:
         print("Skipping PCoA: fewer than 3 method×sample combinations.", file=sys.stderr)
         return
 
-    # Pairwise Bray-Curtis distance matrix
-    dist_matrix = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i + 1, n):
-            d = braycurtis(vectors[i], vectors[j])
-            dist_matrix[i, j] = d
-            dist_matrix[j, i] = d
+    # Replace zero vectors with tiny uniform to avoid NaN from braycurtis
+    abundance_matrix = np.array(matrix_rows)
+    zero_rows = abundance_matrix.sum(axis=1) == 0
+    if zero_rows.any():
+        abundance_matrix[zero_rows] = 1.0 / abundance_matrix.shape[1]
+
+    # Vectorised pairwise Bray-Curtis (scipy C implementation, much faster)
+    condensed = pdist(abundance_matrix, metric="braycurtis")
+
+    # Guard: replace any remaining NaN with 1.0
+    condensed = np.nan_to_num(condensed, nan=1.0)
+
+    dist_matrix = squareform(condensed)
 
     coords, explained = pcoa(dist_matrix)
 
@@ -229,8 +251,14 @@ def plot_pcoa(method_data: dict, outdir: Path):
     unique_samples = sorted(set(labels_sample))
 
     method_colors = {m: c for m, c in zip(unique_methods, sns.color_palette("tab10", len(unique_methods)))}
+
+    # With many samples, don't use per-sample markers (too many shapes)
+    use_sample_markers = len(unique_samples) <= 12
     markers = ["o", "s", "D", "^", "v", "P", "*", "X", "h", "<", ">", "p"]
-    sample_markers = {s: markers[i % len(markers)] for i, s in enumerate(unique_samples)}
+    if use_sample_markers:
+        sample_markers = {s: markers[i % len(markers)] for i, s in enumerate(unique_samples)}
+    else:
+        sample_markers = {s: "o" for s in unique_samples}
 
     fig, ax = plt.subplots(figsize=(8, 7))
 
@@ -239,11 +267,12 @@ def plot_pcoa(method_data: dict, outdir: Path):
             coords[i, 0], coords[i, 1],
             color=method_colors[labels_method[i]],
             marker=sample_markers[labels_sample[i]],
-            s=90, edgecolors="black", linewidth=0.5, zorder=3,
+            s=60 if len(unique_samples) > 20 else 90,
+            edgecolors="black", linewidth=0.3, zorder=3,
+            alpha=0.7 if len(unique_samples) > 20 else 1.0,
         )
 
-    # Legends
-    # Method legend (colour)
+    # Method legend (colour) — always shown
     method_handles = [
         plt.Line2D([0], [0], marker="o", color="w",
                     markerfacecolor=method_colors[m], markersize=8, label=m)
@@ -253,20 +282,24 @@ def plot_pcoa(method_data: dict, outdir: Path):
                      bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, frameon=False)
     ax.add_artist(leg1)
 
-    # Sample legend (shape)
-    sample_handles = [
-        plt.Line2D([0], [0], marker=sample_markers[s], color="w",
-                    markerfacecolor="grey", markersize=8, label=s)
-        for s in unique_samples
-    ]
-    ax.legend(handles=sample_handles, title="Sample",
-              bbox_to_anchor=(1.01, 0.5), loc="center left", fontsize=8, frameon=False)
+    # Sample legend (shape) — only when few enough samples to be meaningful
+    if use_sample_markers:
+        sample_handles = [
+            plt.Line2D([0], [0], marker=sample_markers[s], color="w",
+                        markerfacecolor="grey", markersize=8, label=s)
+            for s in unique_samples
+        ]
+        ax.legend(handles=sample_handles, title="Sample",
+                  bbox_to_anchor=(1.01, 0.5), loc="center left", fontsize=8, frameon=False)
 
     pct1 = explained[0] * 100
     pct2 = explained[1] * 100
     ax.set_xlabel(f"PCoA 1 ({pct1:.1f}%)")
     ax.set_ylabel(f"PCoA 2 ({pct2:.1f}%)")
-    ax.set_title("Bray-Curtis PCoA — methods × samples")
+    subtitle = ""
+    if len(pcoa_samples) < len(sample_cols):
+        subtitle = f" ({len(pcoa_samples)}/{len(sample_cols)} samples shown)"
+    ax.set_title(f"Bray-Curtis PCoA — methods × samples{subtitle}")
     ax.axhline(0, color="grey", linewidth=0.3, zorder=1)
     ax.axvline(0, color="grey", linewidth=0.3, zorder=1)
 

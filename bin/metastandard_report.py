@@ -47,9 +47,10 @@ def img_to_base64(path: Path) -> str:
 def tsv_to_html_table(path: Path, max_rows: int = 200, float_fmt: str = ".4f") -> str:
     """Read a TSV and return an HTML table string."""
     df = pd.read_csv(path, sep="\t")
-    if len(df) > max_rows:
+    total_rows = len(df)
+    if total_rows > max_rows:
         df = df.head(max_rows)
-        note = f'<p class="meta">Showing first {max_rows} of {len(df)} rows.</p>'
+        note = f'<p class="meta">Showing first {max_rows} of {total_rows} rows.</p>'
     else:
         note = ""
 
@@ -85,6 +86,8 @@ def img_block(path: Path, caption: str = "") -> str:
 def classify_files(paths: list) -> dict:
     """Sort input files into categories based on filename patterns."""
     cats = {
+        "read_tracking_plot": None,
+        "read_tracking_table": None,
         "per_method_barplots": [],
         "per_method_heatmaps": [],
         "compare_barplots": [],
@@ -102,6 +105,14 @@ def classify_files(paths: list) -> dict:
     for p in paths:
         p = Path(p)
         name = p.name
+
+        # Read tracking
+        if name == "read_tracking.png":
+            cats["read_tracking_plot"] = p
+            continue
+        elif name == "read_tracking.tsv":
+            cats["read_tracking_table"] = p
+            continue
 
         # Agreement files (check before generic barplot/heatmap patterns)
         if name.startswith("agreement_jaccard_") and name.endswith(".png"):
@@ -324,6 +335,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <h2>MetaStandard</h2>
   <a href="#overview">Overview</a>
   <div class="nav-group">
+    <div class="nav-group-title">QC</div>
+    <a href="#read-tracking">Read attrition</a>
+  </div>
+  <div class="nav-group">
     <div class="nav-group-title">Per-method</div>
     <a href="#per-method-barplots">Barplots</a>
     <a href="#per-method-heatmaps">Heatmaps</a>
@@ -362,6 +377,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 # ---------------------------------------------------------------------------
 # Section builders
 # ---------------------------------------------------------------------------
+
+def section_read_tracking(cats: dict) -> str:
+    """Build HTML for read tracking attrition."""
+    parts = []
+
+    parts.append('<h2 id="read-tracking">Read attrition</h2>')
+    if cats["read_tracking_plot"]:
+        parts.append('<div class="card">')
+        parts.append(img_block(cats["read_tracking_plot"],
+                               "Read counts at each pipeline stage per sample"))
+        parts.append('</div>')
+    else:
+        parts.append('<p class="empty">No read tracking plot found.</p>')
+
+    if cats["read_tracking_table"]:
+        parts.append('<div class="card">')
+        parts.append('<h3>Attrition table</h3>')
+        parts.append(tsv_to_html_table(cats["read_tracking_table"]))
+        parts.append('</div>')
+
+    return "\n".join(parts)
+
 
 def section_per_method(cats: dict) -> str:
     """Build HTML for per-method barplots and heatmaps."""
@@ -521,6 +558,7 @@ def main():
     cats = classify_files(args.input)
 
     content_parts = [
+        section_read_tracking(cats),
         section_per_method(cats),
         section_comparison(cats),
         section_diversity(cats),

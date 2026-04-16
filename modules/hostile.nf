@@ -9,6 +9,7 @@ process HOST_REMOVAL {
     tuple val(sample_id),
           path("${sample_id}_R1.host_removed.fastq.gz"),
           path("${sample_id}_R2.host_removed.fastq.gz"), emit: reads
+    path("${sample_id}_host_removal.log"), emit: log
 
     script:
     """
@@ -18,10 +19,10 @@ process HOST_REMOVAL {
         -2 ${read2} \\
         --un-conc-gz ${sample_id}_R%.host_removed.fastq.gz \\
         --threads ${task.cpus} \\
-        > /dev/null 2> bowtie2_host.log
+        > /dev/null 2> ${sample_id}_host_removal.log
 
     echo "HOST_REMOVAL summary:"
-    tail -1 bowtie2_host.log
+    tail -1 ${sample_id}_host_removal.log
     """
 }
 
@@ -37,6 +38,7 @@ process PHIX_REMOVAL {
     tuple val(sample_id),
           path("${sample_id}_R1.decontam.fastq.gz"),
           path("${sample_id}_R2.decontam.fastq.gz"), emit: reads
+    path("${sample_id}_phix_removal.log"), emit: log
 
     script:
     """
@@ -46,9 +48,9 @@ process PHIX_REMOVAL {
         -2 ${read2} \\
         --un-conc-gz ${sample_id}_R%.decontam.fastq.gz \\
         --threads ${task.cpus} \\
-        > /dev/null 2> bowtie2_phix.log
+        > /dev/null 2> ${sample_id}_phix_removal.log
 
     echo "PHIX_REMOVAL summary:"
-    tail -1 bowtie2_phix.log
+    tail -1 ${sample_id}_phix_removal.log
     """
 }

@@ -49,6 +49,7 @@ process CUTADAPT {
     
     output:
     tuple val(sample_id), path("${sample_id}_R1.trimmed.fastq.gz"), path("${sample_id}_R2.trimmed.fastq.gz"), emit: reads
+    path("${sample_id}_cutadapt.json"), emit: log
 
     script:
     """
@@ -58,6 +59,7 @@ process CUTADAPT {
 
     cutadapt \\
         --cores ${task.cpus} \\
+        --json ${sample_id}_cutadapt.json \\
         -g ^${params.f_primer} -G ^${params.r_primer} \\
         -a ${params.f_nextera} -A ${params.r_nextera} \\
         -A \${f_rc} -a \${r_rc} \\

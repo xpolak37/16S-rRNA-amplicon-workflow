@@ -74,6 +74,7 @@ include { METASTANDARD as AT_DADA2_SINGLE_METASTANDARD }        from './modules/
 include { METASTANDARD as AT_DEBLUR_METASTANDARD }       from './modules/MetaStandard16S'
 include { METASTANDARD as AT_UNOISE_METASTANDARD }       from './modules/MetaStandard16S'
 include { METASTANDARD_PLOTS; METASTANDARD_COMPARE; METASTANDARD_DIVERSITY; METASTANDARD_AGREEMENT; METASTANDARD_REPORT } from './modules/metastandard_plots'
+include { READ_TRACKING } from './modules/read_tracking'
 
 // Mock community evaluation
 include { MOCK_EVALUATION as NB_DADA2_PAIRED_MOCK }        from './modules/mock_evaluation'
@@ -433,6 +434,25 @@ workflow {
     // Classifier agreement metrics (all TSVs at once)
     METASTANDARD_AGREEMENT(ch_metastandard_plots.collect())
 
+    // Read tracking — collect logs from all pipeline stages
+    ch_tracking_logs = Channel.empty()
+    ch_tracking_logs = ch_tracking_logs.mix(CUTADAPT.out.log)
+    ch_tracking_logs = ch_tracking_logs.mix(HOST_REMOVAL.out.log)
+    ch_tracking_logs = ch_tracking_logs.mix(PHIX_REMOVAL.out.log)
+    if ('dada2_paired' in workflowsToRun.asv_tools) {
+        ch_tracking_logs = ch_tracking_logs.mix(DADA2_PAIRED.out.track_control)
+    }
+    if ('dada2_single' in workflowsToRun.asv_tools) {
+        ch_tracking_logs = ch_tracking_logs.mix(DADA2_SINGLE.out.track_control)
+    }
+    if ('deblur' in workflowsToRun.asv_tools) {
+        ch_tracking_logs = ch_tracking_logs.mix(QIIME_DEBLUR.out.stats)
+    }
+    if ('unoise' in workflowsToRun.asv_tools) {
+        ch_tracking_logs = ch_tracking_logs.mix(VSEARCH_UNOISE3.out.track_control)
+    }
+    READ_TRACKING(ch_tracking_logs.collect())
+
     // HTML dashboard — collect all plots and tables from upstream processes
     ch_report_files = Channel.empty()
     ch_report_files = ch_report_files.mix(
@@ -448,6 +468,8 @@ workflow {
         METASTANDARD_AGREEMENT.out.completeness_plot,
         METASTANDARD_AGREEMENT.out.completeness_table,
         METASTANDARD_AGREEMENT.out.summary,
+        READ_TRACKING.out.plot,
+        READ_TRACKING.out.table,
     )
     METASTANDARD_REPORT(ch_report_files.collect())
 

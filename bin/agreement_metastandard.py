@@ -29,6 +29,9 @@ import seaborn as sns
 
 # Rank order (same as other metastandard scripts)
 RANKS = ["d", "p", "c", "o", "f", "g", "s"]
+
+# Maximum number of samples for which individual per-sample plots are produced.
+MAX_PLOT_SAMPLES = 20
 RANK_NAMES = {
     "d": "Domain", "p": "Phylum", "c": "Class",
     "o": "Order", "f": "Family", "g": "Genus", "s": "Species",
@@ -124,7 +127,14 @@ def compute_jaccard_per_sample(method_data: dict, threshold: float) -> dict:
 
 def plot_jaccard_heatmaps(jaccard_data: dict, outdir: Path):
     """One heatmap per sample showing Jaccard similarity between methods."""
-    for sample, jdf in jaccard_data.items():
+    samples = sorted(jaccard_data.keys())
+    if len(samples) > MAX_PLOT_SAMPLES:
+        print(f"Note: {len(samples)} samples detected; plotting first "
+              f"{MAX_PLOT_SAMPLES} of {len(samples)} for Jaccard heatmaps.",
+              file=sys.stderr)
+        samples = samples[:MAX_PLOT_SAMPLES]
+    for sample in samples:
+        jdf = jaccard_data[sample]
         n = len(jdf)
         fig_size = max(5, n * 0.8)
         fig, ax = plt.subplots(figsize=(fig_size, fig_size))

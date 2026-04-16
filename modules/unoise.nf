@@ -7,6 +7,7 @@ process VSEARCH_UNOISE3 {
     output:
     path("asv_table.tsv"), emit: asv_table
     path("ASV_sequences.fasta"), emit: fasta
+    path("unoise_track_control.tsv"), emit: track_control
 
     script:
     """
@@ -70,5 +71,51 @@ process VSEARCH_UNOISE3 {
         NR==1 { \$1="SeqID"; print; next }
         { print }
     ' otu_table_raw.tsv > asv_table.tsv
+
+    # ── 10. Build per-sample read tracking table ──
+    python3 - <<'PYEOF'
+import os, gzip
+from collections import Counter
+
+# Count reads per sample from input fastq.gz files
+input_counts = Counter()
+for f in sorted(os.listdir(".")):
+    if f.endswith(".fastq.gz") and f != "all_reads.fastq":
+        sample = f.replace(".fastq.gz", "")
+        n = 0
+        with gzip.open(f, "rt") as fh:
+            for line in fh:
+                if line.startswith("@"):
+                    n += 1
+        input_counts[sample] = n
+
+# Count reads per sample from filtered.fasta (labels: sample.original_id)
+filtered_counts = Counter()
+with open("filtered.fasta") as fh:
+    for line in fh:
+        if line.startswith(">"):
+            sample = line[1:].split(".")[0]
+            filtered_counts[sample] += 1
+
+# Final read counts from ASV table (column sums)
+final_counts = Counter()
+with open("asv_table.tsv") as fh:
+    header = fh.readline().strip().split("\\t")
+    samples = header[1:]
+    for line in fh:
+        fields = line.strip().split("\\t")
+        for s, v in zip(samples, fields[1:]):
+            final_counts[s] += int(float(v))
+
+# Count ZOTUs before and after chimera removal
+zotus_raw = sum(1 for l in open("zotus_raw.fasta") if l.startswith(">"))
+zotus_clean = sum(1 for l in open("zotus.fasta") if l.startswith(">"))
+
+all_samples = sorted(input_counts.keys())
+with open("unoise_track_control.tsv", "w") as out:
+    out.write("SampleID\\tinput\\tfiltered\\tmapped\\tzotus_raw\\tzotus_nonchim\\n")
+    for s in all_samples:
+        out.write(f"{s}\\t{input_counts[s]}\\t{filtered_counts[s]}\\t{final_counts.get(s,0)}\\t{zotus_raw}\\t{zotus_clean}\\n")
+PYEOF
     """
 }
