@@ -146,15 +146,22 @@ def plot_stacked_bar(plot_df: pd.DataFrame, top_n: int, output_path: Path, title
 
 def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
     """Clustered heatmap — taxa × samples."""
-    data = plot_df.astype(float)
+    data = plot_df.astype(float).fillna(0.0).replace([float('inf'), float('-inf')], 0.0)
 
     # Avoid clustering when only one sample or one taxon
     row_cluster = len(data) > 1
     col_cluster = len(data.columns) > 1
 
+    # Disable clustering if all values in a dimension are identical (zero variance)
+    if row_cluster and (data.nunique(axis=1) <= 1).all():
+        row_cluster = False
+    if col_cluster and (data.nunique(axis=0) <= 1).all():
+        col_cluster = False
+
     height = max(6, len(data) * 0.3)
     width  = max(5, len(data.columns) * 0.8)
 
+    sys.setrecursionlimit(10000)
     g = sns.clustermap(
         data,
         row_cluster=row_cluster,
