@@ -100,6 +100,15 @@ include { MOCK_EVALUATION as AT_UNOISE_MOCK }              from './modules/mock_
 def VALID_ASV        = ['dada2_paired','dada2_single', 'deblur', 'unoise']
 def VALID_CLASSIFIER = ['qnb', 'qblast',"idtaxa","assigntaxonomy"]
 
+def resolveTools(String csv, List valid, String label) {
+    def chosen = csv.tokenize(',').collect { it.trim() } as LinkedHashSet
+    def bad = chosen - valid
+    if (bad) {
+        error "Unknown ${label} tool(s): ${bad}. Valid options: ${valid}"
+    }
+    return chosen
+}
+
 def resolveWorkflows(List validASV, List validClassifier) {
     if (params.all) {
         log.info "Mode: --all  →  running every tool on both axes"
