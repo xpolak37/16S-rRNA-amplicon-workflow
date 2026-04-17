@@ -102,8 +102,14 @@ process VSEARCH_UNOISE3 {
         > track_control.tsv
     echo -e "SampleID\\tinput\\tfiltered\\tmapped" >> track_control.tsv
 
-    join -t\$'\\t' -a1 -a2 -e0 -o0,1.2,2.2 counts_input.txt counts_filtered.txt \
-        | join -t\$'\\t' -a1 -a2 -e0 -o0,1.2,1.3,2.2 - counts_mapped.txt \
-        >> track_control.tsv
+    awk 'BEGIN{FS=OFS="\\t"}
+         f==0 { inp[\$1]=\$2; samples[\$1]=1; next }
+         f==1 { filt[\$1]=\$2; samples[\$1]=1; next }
+         f==2 { mapped[\$1]=\$2; samples[\$1]=1; next }
+         END {
+             for (s in samples)
+                 print s, inp[s]+0, filt[s]+0, mapped[s]+0
+         }' f=0 counts_input.txt f=1 counts_filtered.txt f=2 counts_mapped.txt \
+        | sort >> track_control.tsv
     """
 }
