@@ -76,13 +76,23 @@ process VSEARCH_UNOISE3 {
     # ── 10. Per-step read tracking ──
 
     # Count input reads per sample (from FASTQ headers after step 1)
-    awk 'NR%4==1 { match(\$0, /;sample=([^;]+);/, a); count[a[1]]++ }
-         END { for (s in count) print s "\\t" count[s] }' all_reads.fastq \
+    awk 'NR%4==1 {
+        s = \$0
+        sub(/.*sample=/, "", s)
+        sub(/;.*/, "", s)
+        count[s]++
+    }
+    END { for (s in count) print s "\\t" count[s] }' all_reads.fastq \
         | sort > counts_input.txt
 
     # Count filtered reads per sample (from FASTA headers after step 2)
-    awk '/^>/ { match(\$0, /;sample=([^;]+);/, a); count[a[1]]++ }
-         END { for (s in count) print s "\\t" count[s] }' filtered.fasta \
+    awk '/^>/ {
+        s = \$0
+        sub(/.*sample=/, "", s)
+        sub(/;.*/, "", s)
+        count[s]++
+    }
+    END { for (s in count) print s "\\t" count[s] }' filtered.fasta \
         | sort > counts_filtered.txt
 
     # Sum mapped reads per sample from the OTU table (after step 8)
