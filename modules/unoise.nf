@@ -12,11 +12,12 @@ process VSEARCH_UNOISE3 {
     """
     # ── 1. Concatenate and decompress all oriented reads, labeling each read
     #       with its sample name so vsearch --otutabout produces per-sample
-    #       columns (sample name = filename minus .fastq.gz suffix).
+    #       columns.  Uses ;sample=NAME; annotation (usearch/vsearch standard)
+    #       to avoid dot-splitting ambiguity.  Strip -oriented suffix.
     for f in *.fastq.gz; do
-        sample=\$(basename "\$f" .fastq.gz)
+        sample=\$(basename "\$f" -oriented.fastq.gz)
         gunzip -c "\$f" | awk -v s="\$sample" '
-            NR%4==1 { print "@" s "." substr(\$0,2); next }
+            NR%4==1 { print "@" s ";sample=" s ";" substr(\$0,2); next }
             { print }
         '
     done > all_reads.fastq
