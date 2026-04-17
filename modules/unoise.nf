@@ -7,6 +7,7 @@ process VSEARCH_UNOISE3 {
     output:
     path("asv_table.tsv"), emit: asv_table
     path("ASV_sequences.fasta"), emit: fasta
+    path("track_control.tsv"), emit: tracking
 
     script:
     """
@@ -71,5 +72,38 @@ process VSEARCH_UNOISE3 {
         NR==1 { \$1="SeqID"; print; next }
         { print }
     ' otu_table_raw.tsv > asv_table.tsv
+
+    # ── 10. Per-step read tracking ──
+
+    # Count input reads per sample (from FASTQ headers after step 1)
+    awk 'NR%4==1 { match(\$0, /;sample=([^;]+);/, a); count[a[1]]++ }
+         END { for (s in count) print s "\\t" count[s] }' all_reads.fastq \
+        | sort > counts_input.txt
+
+    # Count filtered reads per sample (from FASTA headers after step 2)
+    awk '/^>/ { match(\$0, /;sample=([^;]+);/, a); count[a[1]]++ }
+         END { for (s in count) print s "\\t" count[s] }' filtered.fasta \
+        | sort > counts_filtered.txt
+
+    # Sum mapped reads per sample from the OTU table (after step 8)
+    awk 'BEGIN{FS=OFS="\\t"}
+         NR==1 { for(i=2;i<=NF;i++) name[i]=\$i; next }
+         { for(i=2;i<=NF;i++) count[i]+=\$i }
+         END { for(i=2;i<=NF;i++) print name[i], count[i] }' otu_table_raw.tsv \
+        | sort > counts_mapped.txt
+
+    # Aggregate counts for pooled steps
+    derep_n=\$(grep -c "^>" derep.fasta)
+    zotus_raw_n=\$(grep -c "^>" zotus_raw.fasta)
+    zotus_n=\$(grep -c "^>" zotus.fasta)
+
+    # Assemble track_control.tsv
+    echo -e "# Aggregate: dereplicated_uniques=\${derep_n} zotus_before_chimera=\${zotus_raw_n} zotus_after_chimera=\${zotus_n}" \
+        > track_control.tsv
+    echo -e "SampleID\\tinput\\tfiltered\\tmapped" >> track_control.tsv
+
+    join -t\$'\\t' -a1 -a2 -e0 -o0,1.2,2.2 counts_input.txt counts_filtered.txt \
+        | join -t\$'\\t' -a1 -a2 -e0 -o0,1.2,1.3,2.2 - counts_mapped.txt \
+        >> track_control.tsv
     """
 }
