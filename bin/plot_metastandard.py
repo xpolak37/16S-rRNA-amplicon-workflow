@@ -161,6 +161,16 @@ def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
     height = max(6, len(data) * 0.3)
     width  = max(5, len(data.columns) * 0.8)
 
+    # Cap figure size to avoid memory errors with large sample counts
+    max_dim = 60
+    if width > max_dim or height > max_dim:
+        scale = max_dim / max(width, height)
+        width  = width * scale
+        height = height * scale
+    dpi = 150 if max(width, height) <= 40 else 100
+
+    show_xlabels = len(data.columns) <= 100
+
     sys.setrecursionlimit(10000)
     g = sns.clustermap(
         data,
@@ -168,19 +178,20 @@ def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
         col_cluster=col_cluster,
         cmap="YlOrRd",
         figsize=(width, height),
-        xticklabels=True,
+        xticklabels=show_xlabels,
         yticklabels=True,
-        linewidths=0.3,
+        linewidths=0.3 if len(data.columns) <= 100 else 0,
         cbar_kws={"label": "Relative abundance"},
     )
     g.ax_heatmap.set_xlabel("Sample")
     g.ax_heatmap.set_ylabel("")
     g.fig.suptitle(title, y=1.01, fontsize=11)
 
-    plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, ha="right", fontsize=8)
+    if show_xlabels:
+        plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, ha="right", fontsize=8)
     plt.setp(g.ax_heatmap.get_yticklabels(), fontsize=7)
 
-    g.savefig(output_path, dpi=150, bbox_inches="tight")
+    g.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close(g.fig)
 
 
