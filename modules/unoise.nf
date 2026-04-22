@@ -7,17 +7,18 @@ process VSEARCH_UNOISE3 {
     output:
     path("asv_table.tsv"), emit: asv_table
     path("ASV_sequences.fasta"), emit: fasta
-    path("unoise_track_control.tsv"), emit: track_control
+    path("track_control.tsv"), emit: track_control
 
     script:
     """
     # ── 1. Concatenate and decompress all oriented reads, labeling each read
     #       with its sample name so vsearch --otutabout produces per-sample
-    #       columns (sample name = filename minus .fastq.gz suffix).
+    #       columns.  Uses ;sample=NAME; annotation (usearch/vsearch standard)
+    #       to avoid dot-splitting ambiguity.  Strip -oriented suffix.
     for f in *.fastq.gz; do
-        sample=\$(basename "\$f" .fastq.gz)
+        sample=\$(basename "\$f" -oriented.fastq.gz)
         gunzip -c "\$f" | awk -v s="\$sample" '
-            NR%4==1 { print "@" s "." substr(\$0,2); next }
+            NR%4==1 { print "@" s ";sample=" s ";" substr(\$0,2); next }
             { print }
         '
     done > all_reads.fastq
@@ -72,50 +73,53 @@ process VSEARCH_UNOISE3 {
         { print }
     ' otu_table_raw.tsv > asv_table.tsv
 
-    # ── 10. Build per-sample read tracking table ──
-    python3 - <<'PYEOF'
-import os, gzip
-from collections import Counter
+    # ── 10. Per-step read tracking ──
 
-# Count reads per sample from input fastq.gz files
-input_counts = Counter()
-for f in sorted(os.listdir(".")):
-    if f.endswith(".fastq.gz") and f != "all_reads.fastq":
-        sample = f.replace(".fastq.gz", "")
-        n = 0
-        with gzip.open(f, "rt") as fh:
-            for line in fh:
-                if line.startswith("@"):
-                    n += 1
-        input_counts[sample] = n
+    # Count input reads per sample (from FASTQ headers after step 1)
+    awk 'NR%4==1 {
+        s = \$0
+        sub(/.*sample=/, "", s)
+        sub(/;.*/, "", s)
+        count[s]++
+    }
+    END { for (s in count) print s "\\t" count[s] }' all_reads.fastq \
+        | sort > counts_input.txt
 
-# Count reads per sample from filtered.fasta (labels: sample.original_id)
-filtered_counts = Counter()
-with open("filtered.fasta") as fh:
-    for line in fh:
-        if line.startswith(">"):
-            sample = line[1:].split(".")[0]
-            filtered_counts[sample] += 1
+    # Count filtered reads per sample (from FASTA headers after step 2)
+    awk '/^>/ {
+        s = \$0
+        sub(/.*sample=/, "", s)
+        sub(/;.*/, "", s)
+        count[s]++
+    }
+    END { for (s in count) print s "\\t" count[s] }' filtered.fasta \
+        | sort > counts_filtered.txt
 
-# Final read counts from ASV table (column sums)
-final_counts = Counter()
-with open("asv_table.tsv") as fh:
-    header = fh.readline().strip().split("\\t")
-    samples = header[1:]
-    for line in fh:
-        fields = line.strip().split("\\t")
-        for s, v in zip(samples, fields[1:]):
-            final_counts[s] += int(float(v))
+    # Sum mapped reads per sample from the OTU table (after step 8)
+    awk 'BEGIN{FS=OFS="\\t"}
+         NR==1 { for(i=2;i<=NF;i++) name[i]=\$i; next }
+         { for(i=2;i<=NF;i++) count[i]+=\$i }
+         END { for(i=2;i<=NF;i++) print name[i], count[i] }' otu_table_raw.tsv \
+        | sort > counts_mapped.txt
 
-# Count ZOTUs before and after chimera removal
-zotus_raw = sum(1 for l in open("zotus_raw.fasta") if l.startswith(">"))
-zotus_clean = sum(1 for l in open("zotus.fasta") if l.startswith(">"))
+    # Aggregate counts for pooled steps
+    derep_n=\$(grep -c "^>" derep.fasta)
+    zotus_raw_n=\$(grep -c "^>" zotus_raw.fasta)
+    zotus_n=\$(grep -c "^>" zotus.fasta)
 
-all_samples = sorted(input_counts.keys())
-with open("unoise_track_control.tsv", "w") as out:
-    out.write("SampleID\\tinput\\tfiltered\\tmapped\\tzotus_raw\\tzotus_nonchim\\n")
-    for s in all_samples:
-        out.write(f"{s}\\t{input_counts[s]}\\t{filtered_counts[s]}\\t{final_counts.get(s,0)}\\t{zotus_raw}\\t{zotus_clean}\\n")
-PYEOF
+    # Assemble track_control.tsv
+    echo -e "# Aggregate: dereplicated_uniques=\${derep_n} zotus_before_chimera=\${zotus_raw_n} zotus_after_chimera=\${zotus_n}" \
+        > track_control.tsv
+    echo -e "SampleID\\tinput\\tfiltered\\tmapped" >> track_control.tsv
+
+    awk 'BEGIN{FS=OFS="\\t"}
+         f==0 { inp[\$1]=\$2; samples[\$1]=1; next }
+         f==1 { filt[\$1]=\$2; samples[\$1]=1; next }
+         f==2 { mapped[\$1]=\$2; samples[\$1]=1; next }
+         END {
+             for (s in samples)
+                 print s, inp[s]+0, filt[s]+0, mapped[s]+0
+         }' f=0 counts_input.txt f=1 counts_filtered.txt f=2 counts_mapped.txt \
+        | sort >> track_control.tsv
     """
 }
