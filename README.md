@@ -26,7 +26,7 @@ flowchart TB
     D --> Z
     E --> QK{"--quick?"}
     QK -- yes --> SS["Subsampling\nseqtk sample"]
-    QK -- no --> XX((""))
+    QK -- no --> XX((" "))
     XX --> F["Merging reads"] & H["DADA2 paired-end\n(split by orientation)"]
     SS --> H
     SS --> F
