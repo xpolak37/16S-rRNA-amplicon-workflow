@@ -47,7 +47,7 @@ confidence_df <- apply(tax_info$boot, 1, function(x) min(x, na.rm = TRUE))
 
 # Build final dataframe
 asv_tax_conf_df <- data.frame(
-    SeqID      = as.character(dna),
+    SeqID      = if (denoising_tool == "unoise") names(dna) else as.character(dna),
     Taxonomy   = taxonomy_string,
     Confidence = confidence_df,
     stringsAsFactors = FALSE

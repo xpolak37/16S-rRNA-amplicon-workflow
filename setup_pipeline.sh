@@ -141,6 +141,8 @@ mkdir -p classifiers
 mkdir -p singularity_cache
 mkdir -p logs
 mkdir -p bowtie_phix
+mkdir -p hostile_index
+mkdir -p blast_db
 
 # Setup log file
 LOGFILE="${INSTALL_DIR}/logs/setup_$(date +%Y%m%d_%H%M%S).log"
@@ -171,7 +173,7 @@ log_success "All required tools are available"
 
 echo ""
 log_info "========================================="
-log_info "STEP 1/3: Downloading pre-built taxonomic classifiers"
+log_info "STEP 1/6: Downloading pre-built taxonomic classifiers"
 log_info "========================================="
 
 CLASSIFIERS_DIR="${INSTALL_DIR}/classifiers"
@@ -182,7 +184,7 @@ if [ -f "silva-138.2-ssu-nr99-341F-805R-classifier.qza" ]; then
 else
     log_info "Downloading classifiers from Zenodo..."
     
-    wget "https://filesender.cesnet.cz/download.php?token=a1fbed9f-128d-4353-ab69-62d15298aa2d&files_ids=831961" \
+    wget "https://zenodo.org/records/19063716/files/classifiers.tar.gz?download=1" \
         -O classifiers.tar.gz 2>&1 | tee -a "${LOGFILE}"
     
     if [ $? -eq 0 ]; then
@@ -213,7 +215,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 2/4: Downloading Singularity containers"
+log_info "STEP 2/6: Downloading Singularity containers"
 log_info "========================================="
 
 SING_DIR="${INSTALL_DIR}/singularity_cache"
@@ -230,6 +232,9 @@ declare -A CONTAINERS=(
     ["quay.io-qiime2-amplicon-2026.1.img"]="docker://quay.io/qiime2/amplicon:2026.1"
     ["quay.io-biocontainers-entrez-direct-24.0--he881be0_0.img"]="docker://quay.io/biocontainers/entrez-direct:24.0--he881be0_0"
     ["quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img"]="docker://quay.io/biocontainers/bowtie2:2.5.5--ha27dd3b_0"
+    ["quay.io-biocontainers-vsearch-2.30.5--h0bb26bb_0.img"]="docker://quay.io/biocontainers/vsearch:2.30.5--h0bb26bb_0"
+    ["quay.io-biocontainers-seaborn-0.13.2.img"]="docker://quay.io/biocontainers/seaborn:0.13.2"
+    ["quay.io-biocontainers-blast-2.16.0--h66d330f_4.img"]="docker://quay.io/biocontainers/blast:2.16.0--h66d330f_4"
 )
 CONTAINER_COUNT=0
 TOTAL_CONTAINERS=${#CONTAINERS[@]}
@@ -256,12 +261,41 @@ for img_name in "${!CONTAINERS[@]}"; do
 done
 
 #===============================================================================
+# DOWNLOAD BLAST 16S DATABASE
+#===============================================================================
+
+echo ""
+log_info "========================================="
+log_info "STEP 3/6: Downloading local BLAST 16S_ribosomal_RNA database"
+log_info "========================================="
+
+BLAST_DB_DIR="${INSTALL_DIR}/blast_db"
+cd "${BLAST_DB_DIR}"
+
+if ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
+    log_warn "16S_ribosomal_RNA BLAST database already present. Skipping."
+else
+    log_info "Downloading 16S_ribosomal_RNA database via update_blastdb.pl..."
+
+    singularity exec --bind "${BLAST_DB_DIR}:${BLAST_DB_DIR}" --pwd "${BLAST_DB_DIR}" \
+        "${SING_DIR}/quay.io-biocontainers-blast-2.16.0--h66d330f_4.img" \
+        update_blastdb.pl --decompress 16S_ribosomal_RNA >> "${LOGFILE}" 2>&1
+
+    if ls 16S_ribosomal_RNA.n* 1>/dev/null 2>&1; then
+        log_success "16S_ribosomal_RNA database downloaded successfully"
+    else
+        log_error "Failed to download 16S_ribosomal_RNA database"
+        # exit 1
+    fi
+fi
+
+#===============================================================================
 # BUILDING BOWTIE INDEXES
 #===============================================================================
 
 echo ""
 log_info "========================================="
-log_info "STEP 3/4: Building bowtie indexes"
+log_info "STEP 4/6: Building bowtie indexes"
 log_info "========================================="
 
 BOWTIE_DIR="${INSTALL_DIR}/bowtie_phix"
@@ -278,7 +312,10 @@ else
         
         log_info "Building bowtie indexes for phiX174 genome..."
 
-        singularity exec ${SING_DIR}/quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img bowtie2-build phiX174.fasta phiX174
+        singularity exec \
+        --bind ${INSTALL_DIR}:/${INSTALL_DIR} \
+        ${SING_DIR}/quay.io-biocontainers-bowtie2-2.5.5--ha27dd3b_0.img \
+        bowtie2-build phiX174.fasta phiX174
 
         if [ -f "phiX174.1.bt2" ]; then
             log_success "Indexes built succesfully"
@@ -294,12 +331,49 @@ else
 fi
 
 #===============================================================================
+# DOWNLOAD HUMAN DECONTAMINATION INDEX
+#===============================================================================
+
+echo ""
+log_info "========================================="
+log_info "STEP 5/6: Downloading human decontamination bowtie2 index"
+log_info "========================================="
+
+HOSTILE_DIR="${INSTALL_DIR}/hostile_index"
+cd "${HOSTILE_DIR}"
+
+if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
+    log_warn "Human decontamination index already present. Skipping."
+else
+    log_info "Downloading human-t2t-hla-argos985-mycob140 bowtie2 index..."
+
+    wget "https://objectstorage.uk-london-1.oraclecloud.com/n/lrbvkel2wjot/b/human-genome-bucket/o/human-t2t-hla-argos985-mycob140.tar" \
+        -O human-t2t-hla-argos985-mycob140.tar 2>&1 | tee -a "${LOGFILE}"
+
+    if [ $? -eq 0 ]; then
+        log_info "Extracting bowtie2 index..."
+        tar -xf human-t2t-hla-argos985-mycob140.tar >> "${LOGFILE}" 2>&1
+        rm human-t2t-hla-argos985-mycob140.tar
+
+        if ls human-t2t-hla-argos985-mycob140*.bt2 1>/dev/null 2>&1; then
+            log_success "Human decontamination index downloaded successfully"
+        else
+            log_error "Index extraction failed"
+            exit 1
+        fi
+    else
+        log_error "Failed to download human decontamination index"
+        exit 1
+    fi
+fi
+
+#===============================================================================
 # DOWNLOAD TESTING DATASET
 #===============================================================================
 
 echo ""
 log_info "========================================="
-log_info "STEP 4/4: Downloading test dataset"
+log_info "STEP 6/6: Downloading test dataset"
 log_info "========================================="
 
 TEST_DIR="${PIPELINE_DIR}"
@@ -310,7 +384,7 @@ if [ -f "test/SRR13005968-test_2.fastq.gz" ]; then
 else
     log_info "Downloading test data from Zenodo..."
     
-    wget "https://filesender.cesnet.cz/download.php?token=323bf327-a8a5-4ec2-b82c-0c9026388202&files_ids=836539" \
+    wget "https://zenodo.org/records/19590697/files/test.zip?download=1" \
         -O test.zip 2>&1 | tee -a "${LOGFILE}"
     
     if [ $? -eq 0 ]; then
@@ -363,6 +437,9 @@ params {
     // Cache directories
     singularity_cache_dir = '${INSTALL_DIR}/singularity_cache'
     classifiers_dir    = '${INSTALL_DIR}/classifiers'
+    bowtie_dir         = '${INSTALL_DIR}/bowtie_phix'
+    hostile_index_dir  = '${INSTALL_DIR}/hostile_index'
+    blast_db_dir       = '${INSTALL_DIR}/blast_db'
 }
 EOF
 
@@ -390,6 +467,8 @@ echo "  - Total time: ${MINUTES} minutes ${SECONDS} seconds"
 echo ""
 echo "Resource Locations:"
 echo "  - Classifiers:     ${INSTALL_DIR}/classifiers/"
+echo "  - Hostile index:      ${INSTALL_DIR}/hostile_index/"
+echo "  - Bowtie PhiX:       ${INSTALL_DIR}/bowtie_phix/"
 echo "  - Containers:         ${INSTALL_DIR}/singularity_cache/"
 echo "  - Configuration:      ${CONFIG_FILE}"
 echo "  - Log file:           ${LOGFILE}"

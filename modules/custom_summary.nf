@@ -1,0 +1,147 @@
+/*
+========================================================================================
+    CUSTOM SUMMARY MODULES
+========================================================================================
+    Builds a small per-run QC report from raw FastQC outputs.
+
+    Reports:
+      - Adapter types detected across samples
+      - Sequencing depth distribution on raw reads (5-number summary + mean)
+      - Samples with read count below `params.min_reads_threshold`
+      - Overrepresented sequences (deduped) optionally annotated with the
+        top hit from a remote NCBI BLAST against `nt`.
+
+    Three processes are used because no single biocontainer ships both
+    Python and BLAST:
+      1. CUSTOM_SUMMARY_PARSE  — Python image, parses FastQC zips
+      2. CUSTOM_SUMMARY_BLAST  — BLAST image, runs remote blastn
+                                  (best-effort: failure is captured into a
+                                  sentinel file so the pipeline keeps going)
+      3. CUSTOM_SUMMARY_RENDER — Python image, emits HTML + raw txt
+----------------------------------------------------------------------------------------
+*/
+
+process CUSTOM_SUMMARY_PARSE {
+    publishDir "${params.outdir}/custom_summary", mode: 'copy', pattern: 'overrepresented.fasta'
+
+    input:
+    path fastqc_zips
+
+    output:
+    path "fastqc_parsed.json",   emit: json
+    path "overrepresented.fasta", emit: fasta
+
+    script:
+    """
+    mkdir -p fastqc_input
+    for f in ${fastqc_zips}; do
+        cp "\$f" fastqc_input/
+    done
+
+    python3 ${projectDir}/bin/build_custom_summary.py parse \\
+        --fastqc-dir fastqc_input \\
+        --out-json fastqc_parsed.json \\
+        --out-fasta overrepresented.fasta \\
+        --top-overreps ${params.custom_summary_top_overreps}
+    """
+}
+
+process CUSTOM_SUMMARY_BLAST {
+    containerOptions "--bind ${params.blast_db_dir}"
+    publishDir "${params.outdir}/custom_summary", mode: 'copy', pattern: 'blast_hits.tsv'
+
+    input:
+    path fasta
+
+    output:
+    path "blast_hits.tsv", emit: tsv
+
+    script:
+    """
+    # Point blastn at the local 16S_ribosomal_RNA database.
+    export BLASTDB="${params.blast_db_dir}"
+
+    # Best-effort local BLAST. If the FASTA is empty or blastn fails for
+    # any reason, we write a sentinel file instead of failing the pipeline.
+    if [ ! -s ${fasta} ]; then
+        echo "BLAST_SKIPPED: no overrepresented sequences" > blast_hits.tsv
+        exit 0
+    fi
+
+    # BLAST sequences one at a time so results are written continuously.
+    # A timeout or failure only loses the remaining sequences — any hits
+    # already written are preserved and included in the final report.
+    touch blast_hits.tsv
+
+    while IFS= read -r header || [ -n "\$header" ]; do
+        IFS= read -r seq || true
+        qid=\${header#>}
+
+        tmpfasta=\${qid}.fa
+        printf '>%s\\n%s\\n' "\$qid" "\$seq" > "\$tmpfasta"
+
+        set +e
+        timeout ${params.custom_summary_blast_timeout} blastn \\
+            -query "\$tmpfasta" \\
+            -db ${params.custom_summary_blast_db} \\
+            -outfmt '6 qseqid ssaccver stitle bitscore' \\
+            -out "\${qid}_raw.tsv" 2>> blast.err
+        rc=\$?
+        set -e
+
+        rm -f "\$tmpfasta"
+
+        if [ \$rc -ne 0 ]; then
+            echo "[WARN] blastn for \$qid exited with status \$rc — skipping" >&2
+            continue
+        fi
+
+        # Keep best hit (highest bitscore) for this query and append to results
+        awk -v qid="\$qid" '
+        {
+            bs=\$NF; acc=\$2
+            stitle=""
+            for(i=3;i<NF;i++) stitle = stitle (i==3?"":OFS) \$i
+            if (!(qid in best) || bs > best[qid]) {
+                best[qid] = bs
+                line[qid] = qid "\\t" acc " " stitle
+            }
+        }
+        END { if (qid in line) print line[qid] }
+        ' "\${qid}_raw.tsv" >> blast_hits.tsv
+
+        rm -f "\${qid}_raw.tsv"
+    done < ${fasta}
+
+    # If nothing was written at all, leave a note but don't fail
+    if [ ! -s blast_hits.tsv ]; then
+        echo "BLAST_SKIPPED: all sequences failed or produced no hits" > blast_hits.tsv
+    fi
+    """
+}
+
+process CUSTOM_SUMMARY_RENDER {
+    publishDir "${params.outdir}/custom_summary", mode: 'copy'
+
+    input:
+    path parsed_json
+    path blast_tsv
+
+    output:
+    path "custom_summary.html",   emit: html
+    path "raw_custom_summary.txt", emit: txt
+
+    script:
+    def attempted_flag = params.custom_summary_blast ? "--blast-attempted" : "--no-blast-attempted"
+    """
+    python3 ${projectDir}/bin/build_custom_summary.py render \\
+        --in-json ${parsed_json} \\
+        --blast-tsv ${blast_tsv} \\
+        --output-html custom_summary.html \\
+        --output-txt raw_custom_summary.txt \\
+        --threshold ${params.min_reads_threshold} \\
+        --run-id ${params.run_id} \\
+        --blast-db ${params.custom_summary_blast_db} \\
+        ${attempted_flag}
+    """
+}

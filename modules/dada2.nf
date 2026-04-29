@@ -11,12 +11,16 @@ process DADA2_PAIRED {
     
     script:
     """
-    R1_files=\$(ls *_R1*.fastq.gz | sort | tr '\\n' ' ')
-    R2_files=\$(ls *_R2*.fastq.gz | sort | tr '\\n' ' ')
-    
+    fwd_R1_files=\$(ls *_fwd_R1.fastq.gz 2>/dev/null | sort | tr '\\n' ' ')
+    fwd_R2_files=\$(ls *_fwd_R2.fastq.gz 2>/dev/null | sort | tr '\\n' ' ')
+    rev_R1_files=\$(ls *_rev_R1.fastq.gz 2>/dev/null | sort | tr '\\n' ' ')
+    rev_R2_files=\$(ls *_rev_R2.fastq.gz 2>/dev/null | sort | tr '\\n' ' ')
+
     Rscript ${projectDir}/bin/dada2_paired.R \\
-        --input_R1 \${R1_files} \\
-        --input_R2 \${R2_files} \\
+        --input_fwd_R1 \${fwd_R1_files} \\
+        --input_fwd_R2 \${fwd_R2_files} \\
+        --input_rev_R1 \${rev_R1_files} \\
+        --input_rev_R2 \${rev_R2_files} \\
         --nproc ${task.cpus} \\
         --truncQ ${params.paired_truncQ} \\
         --truncLen_R1 ${params.truncLen_R1} \\

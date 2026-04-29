@@ -1,0 +1,21 @@
+# Pipeline resource directories (created by setup_pipeline.sh)
+classifiers/
+singularity_cache/
+bowtie_phix/
+hostile_index/
+logs/
+blast_db/
+
+# Nextflow working files
+work/
+.nextflow/
+.nextflow.log*
+results/
+
+# Test data
+test/
+
+# Other materials
+pipeline_paths.config
+raw_custom_summary.txt
+test_blastdb_setup.sh

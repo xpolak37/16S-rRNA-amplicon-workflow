@@ -47,7 +47,12 @@ errF <- learnErrors(filtFs, multithread=nproc,nbases=1e9)
     
 # dada
 dadaFs <- dada(filtFs, err=errF,multithread=nproc)
-    
+# dada() returns a bare dada-class (not a list) when there is only one sample;
+# wrap it so downstream list-assuming code works consistently
+if (inherits(dadaFs, "dada")) {
+    dadaFs <- setNames(list(dadaFs), sample.names)
+}
+
 # seqtab
 seqtab <- makeSequenceTable(dadaFs)
     
