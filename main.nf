@@ -34,6 +34,7 @@ include { CUSTOM_SUMMARY_PARSE; CUSTOM_SUMMARY_BLAST; CUSTOM_SUMMARY_RENDER } fr
 include { CUTADAPT; CUTADAPT_DADA2_ORIENT } from './modules/cutadapt'
 include { HOST_REMOVAL }                    from './modules/hostile.nf'
 include { PHIX_REMOVAL }                    from './modules/hostile.nf'
+include { FASTQ_SYNC }                      from './modules/hostile.nf'
 include { DADA2_PAIRED }                       from './modules/dada2'
 include { DADA2_SINGLE }                       from './modules/dada2'
 include { MERGING_READS }               from './modules/se_preprocessing.nf'
@@ -176,12 +177,13 @@ workflow {
     path_hostile_index = params.hostile_index_dir
     HOST_REMOVAL(CUTADAPT.out.reads, path_hostile_index)
     PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
+    FASTQ_SYNC(PHIX_REMOVAL.out.reads)
 
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
         // Split each sample's reads by orientation so DADA2 learns separate
         // error models per orientation, then merges the ASV tables afterwards.
-        CUTADAPT_DADA2_ORIENT(PHIX_REMOVAL.out.reads)
+        CUTADAPT_DADA2_ORIENT(FASTQ_SYNC.out.reads)
 
         dada2_input_paired = CUTADAPT_DADA2_ORIENT.out
             .map { sample_id, fwd_r1, fwd_r2, rev_r1, rev_r2 ->
@@ -196,7 +198,7 @@ workflow {
     def needs_merging = ['deblur', 'unoise','dada2_single']
 
     if (workflowsToRun.asv_tools.any { it in needs_merging }) {
-        MERGING_READS(PHIX_REMOVAL.out.reads)
+        MERGING_READS(FASTQ_SYNC.out.reads)
     }
 
     // Orienting (only for tools that can have oriented reads)

@@ -26,10 +26,12 @@ flowchart TB
     D --> Z
     E --> QK{"--quick?"}
     QK -- yes --> SS["Subsampling\nseqtk sample"]
-    QK -- no --> F
-    SS --> F["Merging reads"]
+    QK -- no --> XX((""))
+    XX --> F["Merging reads"] & H["DADA2 paired-end\n(split by orientation)"]
+    SS --> H
+    SS --> F
     F --> G["Orienting reads"]
-    F --> H["DADA2 paired-end\n(split by orientation)"] & I["DADA2 single-end"]
+    F --> I["DADA2 single-end"]
     G --> J["Deblur via QIIME"]
     G --> K["UNOISE3 via VSEARCH"]
     H --> M["Naive Bayes"] & P["BLAST"] & S["IDTAXA"] & V["AssignTaxonomy"]
