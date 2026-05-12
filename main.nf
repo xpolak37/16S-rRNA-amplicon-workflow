@@ -439,7 +439,8 @@ workflow {
     ch_multiqc_files = Channel.empty()
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC_RAW.out.zip.collect().ifEmpty([]))
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC_TRIMMED.out.zip.collect().ifEmpty([]))
-    
+    ch_multiqc_files = ch_multiqc_files.mix(FASTQ_SYNC.out.json.collect().ifEmpty([]))
+
     // MultiQC aggregation
     MULTIQC(ch_multiqc_files.collect())
 
