@@ -40,8 +40,19 @@ names(filtFs) <- sample.names
   
 # filtering function
 out <- filterAndTrim(fnFs, filtFs, truncLen = truncLen, maxN=0, maxEE=maxEE, truncQ=truncQ, rm.phix=TRUE,
-                     compress=TRUE, multithread=nproc) 
-    
+                     compress=TRUE, multithread=nproc)
+
+# drop samples that produced zero filtered reads (no output file written)
+keep <- file.exists(filtFs)
+if (!all(keep)) {
+    dropped <- names(filtFs)[!keep]
+    message("Dropping ", length(dropped), " sample(s) with zero reads after filtering: ",
+            paste(dropped, collapse=", "))
+    filtFs <- filtFs[keep]
+    sample.names <- sample.names[keep]
+    out <- out[keep, , drop=FALSE]
+}
+
 # errors
 errF <- learnErrors(filtFs, multithread=nproc,nbases=1e9)
     
