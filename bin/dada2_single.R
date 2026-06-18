@@ -25,7 +25,9 @@ rget_args_multi <- function(args, flag) {
 input   <- rget_args_multi(args, "--input")
 nproc       <- as.integer(get_arg(args, "--nproc",        "1"))
 truncQ      <- as.integer(get_arg(args, "--truncQ",       "2"))
-truncLen <- as.integer(get_arg(args, "--truncLen",  "400"))
+truncLen <- as.integer(get_arg(args, "--truncLen",  "0"))
+minLen   <- as.integer(get_arg(args, "--minLen",   "380"))
+maxLen   <- as.integer(get_arg(args, "--maxLen",   "430"))
 maxEE    <- as.double(get_arg(args,  "--maxEE",     "2"))
 
 # samples
@@ -39,8 +41,12 @@ filtFs <- file.path("filtered", paste0(sample.names, "_F_filt.fastq.gz"))
 names(filtFs) <- sample.names
   
 # filtering function
-out <- filterAndTrim(fnFs, filtFs, truncLen = truncLen, maxN=0, maxEE=maxEE, truncQ=truncQ, rm.phix=TRUE,
-                     compress=TRUE, multithread=nproc) 
+# NOTE (dada2 semantics): maxLen is enforced on the raw read BEFORE trimming/
+# truncation; minLen is enforced AFTER. truncLen=0 keeps the natural amplicon
+# length, so the minLen/maxLen window is what bounds merged-read length.
+out <- filterAndTrim(fnFs, filtFs, truncLen = truncLen, minLen = minLen, maxLen = maxLen,
+                     maxN=0, maxEE=maxEE, truncQ=truncQ, rm.phix=TRUE,
+                     compress=TRUE, multithread=nproc)
     
 # errors
 errF <- learnErrors(filtFs, multithread=nproc,nbases=1e9)

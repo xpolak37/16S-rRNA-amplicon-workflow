@@ -51,6 +51,8 @@ process DADA2_SINGLE {
         --nproc ${task.cpus} \\
         --truncQ ${params.single_truncQ} \\
         --truncLen ${params.truncLen} \\
+        --minLen ${params.single_minLen} \\
+        --maxLen ${params.single_maxLen} \\
         --maxEE ${params.maxEE}
     """
 }
