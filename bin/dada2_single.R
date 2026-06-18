@@ -47,16 +47,31 @@ names(filtFs) <- sample.names
 out <- filterAndTrim(fnFs, filtFs, truncLen = truncLen, minLen = minLen, maxLen = maxLen,
                      maxN=0, maxEE=maxEE, truncQ=truncQ, rm.phix=TRUE,
                      compress=TRUE, multithread=nproc)
-    
+
+# filterAndTrim does NOT write an output file for samples whose reads were all
+# removed. Downstream learnErrors/derepFastq is then handed a path that does not
+# exist ("Not all provided files exist") and the whole run dies because of a few
+# empty samples. Keep only samples that actually produced a filtered file.
+kept <- file.exists(filtFs)
+if (!any(kept)) {
+    stop("filterAndTrim removed all reads from every sample - check minLen/maxLen ",
+         "against the merged read length distribution (truncQ/maxEE may also be too strict).")
+}
+if (!all(kept)) {
+    message(sprintf("Dropping %d sample(s) with no reads passing the filter: %s",
+                    sum(!kept), paste(names(filtFs)[!kept], collapse = ", ")))
+}
+filtFs <- filtFs[kept]
+
 # errors
 errF <- learnErrors(filtFs, multithread=nproc,nbases=1e9)
-    
+
 # dada
 dadaFs <- dada(filtFs, err=errF,multithread=nproc)
 # dada() returns a bare dada-class (not a list) when there is only one sample;
 # wrap it so downstream list-assuming code works consistently
 if (inherits(dadaFs, "dada")) {
-    dadaFs <- setNames(list(dadaFs), sample.names)
+    dadaFs <- setNames(list(dadaFs), names(filtFs))
 }
 
 # seqtab
@@ -76,15 +91,22 @@ final_seqtab <- cbind(
 )
 write.table(final_seqtab, file="asv_table.tsv",sep="\t",quote=FALSE,row.names=FALSE) 
 
-# tracking reads through the pipeline
+# tracking reads through the pipeline.
+# Align per-sample counts by name so dropped (zero-read) samples still appear,
+# reported as 0 for the stages they never reached.
 getN <- function(x) sum(getUniques(x))
-final_track <- cbind(out, sapply(dadaFs, getN), rowSums(seqtab.nochim))
-colnames(final_track) <- c("input", "filtered", "denoisedF", "nonchim")
-rownames(final_track) <- sample.names 
-final_track <- cbind(
-  SampleID = rownames(final_track),
-  final_track
+denoisedF <- sapply(dadaFs, getN)        # named by surviving samples
+nonchim   <- rowSums(seqtab.nochim)      # named by surviving samples
+
+final_track <- data.frame(
+  SampleID  = sample.names,
+  input     = out[, 1],                                  # positional: out rows follow fnFs order
+  filtered  = out[, 2],
+  denoisedF = denoisedF[match(sample.names, names(denoisedF))],
+  nonchim   = nonchim[match(sample.names, names(nonchim))],
+  stringsAsFactors = FALSE
 )
+final_track[is.na(final_track)] <- 0
 
 # saving results - track control, taxonomy and abundances
 write.table(final_track,file="track_control.tsv",sep="\t",quote=FALSE,row.names=FALSE)
