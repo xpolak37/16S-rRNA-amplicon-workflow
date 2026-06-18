@@ -35,10 +35,14 @@ colnames(asv_tax_df) <- ranks[1:ncol(asv_tax_df)]
 # Collapse taxonomy ranks into a single semicolon-separated string
 prefixes <- c("d__", "p__", "c__", "o__", "f__", "g__", "s__")
 
-# Collapse taxonomy ranks into a single semicolon-separated string with prefixes
+# Collapse taxonomy ranks into a single semicolon-separated string with prefixes.
+# Prefixes are assigned by each taxon's actual rank (column position) BEFORE
+# dropping placeholders, so dropping an intermediate "unassigned" rank (e.g. an
+# "uncultured" Order with a classified Family/Genus below) leaves a gap rather
+# than shifting every deeper taxon up one rank.
 taxonomy_string <- apply(asv_tax_df, 1, function(x) {
-    x <- x[x != "unassigned"]
-    paste(paste0(prefixes[1:length(x)], x), collapse = ";")
+    keep <- x != "unassigned"
+    paste(paste0(prefixes[seq_along(x)][keep], x[keep]), collapse = ";")
 })
 # Get minimum confidence per ASV
 confidence_df <- sapply(tax_info, function(x) min(x$confidence))
