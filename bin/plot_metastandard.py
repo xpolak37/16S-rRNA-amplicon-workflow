@@ -148,8 +148,22 @@ def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
     """Clustered heatmap — taxa × samples."""
     data = plot_df.astype(float).fillna(0.0).replace([float('inf'), float('-inf')], 0.0)
 
-    # Avoid clustering when only one sample or one taxon
-    row_cluster = len(data) > 1
+    # Row hierarchical clustering is recursive in scipy and overflows the stack
+    # for very large matrices: ASV-level tables have thousands of rows, which
+    # produces a deeply unbalanced dendrogram and a RecursionError (and even if
+    # it didn't, thousands of labelled rows are unreadable). Above these
+    # thresholds keep all rows but order them by mean abundance and skip row
+    # clustering / row labels. Aggregated levels (genus/family) are unaffected.
+    MAX_CLUSTER_ROWS = 500   # below this, dendrogram depth stays well under the recursion limit
+    MAX_LABEL_ROWS   = 100   # above this, per-row y labels are illegible
+
+    n_rows = len(data)
+    if n_rows > MAX_CLUSTER_ROWS:
+        data = data.loc[data.mean(axis=1).sort_values(ascending=False).index]
+
+    # Avoid clustering when only one taxon / one sample, or when there are too
+    # many rows to cluster safely.
+    row_cluster = 1 < n_rows <= MAX_CLUSTER_ROWS
     col_cluster = len(data.columns) > 1
 
     # Disable clustering if all values in a dimension are identical (zero variance)
@@ -157,6 +171,8 @@ def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
         row_cluster = False
     if col_cluster and (data.nunique(axis=0) <= 1).all():
         col_cluster = False
+
+    show_ylabels = n_rows <= MAX_LABEL_ROWS
 
     height = max(6, len(data) * 0.3)
     width  = max(5, len(data.columns) * 0.8)
@@ -179,7 +195,7 @@ def plot_heatmap(plot_df: pd.DataFrame, output_path: Path, title: str):
         cmap="YlOrRd",
         figsize=(width, height),
         xticklabels=show_xlabels,
-        yticklabels=True,
+        yticklabels=show_ylabels,
         linewidths=0.3 if len(data.columns) <= 100 else 0,
         cbar_kws={"label": "Relative abundance"},
     )
