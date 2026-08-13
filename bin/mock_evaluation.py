@@ -186,6 +186,9 @@ def load_metastandard_table(path, mock_pattern, synonyms=None):
     synonyms = synonyms or {}
     df = pd.read_csv(path, sep="\t")
 
+    # keep rows that do NOT start with d__Unclassified
+    df = df[~df["TaxID"].str.startswith("d__Unclassified", na=False)]
+    
     # Identify mock samples
     sample_cols = [col for col in df.columns if col != "TaxID"]
     mock_cols = identify_mock_samples(sample_cols, mock_pattern)
@@ -249,10 +252,8 @@ def prepare_plot_data(reference, observed_df, top_n):
     Combines reference and observed samples, keeps top_n genera.
     """
     # Combine reference and observed
-    combined = observed_df.copy()
-    combined["Reference"] = reference
+    combined = pd.merge(observed_df, reference, how="outer", on=["Genus"])
     combined = combined.fillna(0)
-    
     # Calculate mean abundance across all samples for ranking
     combined["mean_abundance"] = combined.mean(axis=1)
     combined = combined.sort_values("mean_abundance", ascending=False)

@@ -20,16 +20,15 @@ All parameters are set to work properly on specific data from our lab. Before an
 ```mermaid
 flowchart TB
     A["Input samplesheet"] --> B["FastQC on raw reads"]
-    A --> C["Cutadapt trimming"] & Z["MultiQC"]
+    B --> Z
+    A --> QK{"--quick?"}
+    QK -- yes --> SS["Subsampling\nseqtk sample"]
+    QK -- no --> C["Cutadapt trimming"] 
     C --> D["FastQC on trimmed reads"] & E["Host removal (human + PhiX)\nBowtie2"]
     B --> CS["Custom Summary\n(overrepresented seqs + BLAST)"]
-    D --> Z
-    E --> QK{"--quick?"}
-    QK -- yes --> SS["Subsampling\nseqtk sample"]
-    QK -- no --> XX((" "))
-    XX --> F["Merging reads"] & H["DADA2 paired-end\n(split by orientation)"]
-    SS --> H
-    SS --> F
+    D --> Z["MultiQC"]
+    E --> F["Merging reads"] & H["DADA2 paired-end\n(split by orientation)"]
+    SS --> C["Cutadapt trimming"] 
     F --> G["Orienting reads"]
     F --> I["DADA2 single-end"]
     G --> J["Deblur via QIIME"]

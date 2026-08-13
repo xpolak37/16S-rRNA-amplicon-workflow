@@ -110,6 +110,23 @@ def resolveTools(String csv, List valid, String label) {
     return chosen
 }
 
+def hasMinReads(readFile, int minReads = 100) {
+    def path   = readFile.toString()
+    def needed = minReads * 4          // 4 lines per FASTQ record
+    def n      = 0
+    def ins    = readFile.newInputStream()
+    try {
+        def stream = path.endsWith('.gz') ? new java.util.zip.GZIPInputStream(ins) : ins
+        def reader = new BufferedReader(new InputStreamReader(stream))
+        String line
+        while (n < needed && (line = reader.readLine()) != null) n++
+        reader.close()
+    } finally {
+        ins.close()
+    }
+    return n >= needed
+}
+
 def resolveWorkflows(List validASV, List validClassifier) {
     if (params.all) {
         log.info "Mode: --all  →  running every tool on both axes"
@@ -179,11 +196,27 @@ workflow {
     PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
     FASTQ_SYNC(PHIX_REMOVAL.out.reads)
 
+    // Drop samples with fewer than 100 reads before any ASV inference
+    def min_reads = params.min_reads ?: 100
+
+    FASTQ_SYNC.out.reads
+    .branch { sample_id, r1, r2 ->
+        pass: hasMinReads(r1, min_reads)
+        fail: true
+    }
+    .set { ch_synced_by_count }
+
+    ch_synced_by_count.fail.subscribe { sample_id, r1, r2 ->
+        log.warn "Sample '${sample_id}' has fewer than ${min_reads} reads after preprocessing — excluding from dada2_single, dada2_paired, deblur, unoise and downstream steps."
+    }
+
+    ch_reads_for_asv = ch_synced_by_count.pass
+
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
         // Split each sample's reads by orientation so DADA2 learns separate
         // error models per orientation, then merges the ASV tables afterwards.
-        CUTADAPT_DADA2_ORIENT(FASTQ_SYNC.out.reads)
+        CUTADAPT_DADA2_ORIENT(ch_reads_for_asv)
 
         dada2_input_paired = CUTADAPT_DADA2_ORIENT.out
             .map { sample_id, fwd_r1, fwd_r2, rev_r1, rev_r2 ->
@@ -198,7 +231,7 @@ workflow {
     def needs_merging = ['deblur', 'unoise','dada2_single']
 
     if (workflowsToRun.asv_tools.any { it in needs_merging }) {
-        MERGING_READS(FASTQ_SYNC.out.reads)
+        MERGING_READS(ch_reads_for_asv)
     }
 
     // Orienting (only for tools that can have oriented reads)
@@ -439,7 +472,8 @@ workflow {
     ch_multiqc_files = Channel.empty()
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC_RAW.out.zip.collect().ifEmpty([]))
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC_TRIMMED.out.zip.collect().ifEmpty([]))
-    
+    ch_multiqc_files = ch_multiqc_files.mix(FASTQ_SYNC.out.json.collect().ifEmpty([]))
+
     // MultiQC aggregation
     MULTIQC(ch_multiqc_files.collect())
 
