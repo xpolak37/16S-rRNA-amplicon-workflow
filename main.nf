@@ -35,6 +35,7 @@ include { CUTADAPT; CUTADAPT_DADA2_ORIENT } from './modules/cutadapt'
 include { HOST_REMOVAL }                    from './modules/hostile.nf'
 include { PHIX_REMOVAL }                    from './modules/hostile.nf'
 include { FASTQ_SYNC }                      from './modules/hostile.nf'
+include { RENAME_SAMPLES } from './modules/rename_samples.nf'
 include { DADA2_PAIRED }                       from './modules/dada2'
 include { DADA2_SINGLE }                       from './modules/dada2'
 include { MERGING_READS }               from './modules/se_preprocessing.nf'
@@ -196,10 +197,13 @@ workflow {
     PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
     FASTQ_SYNC(PHIX_REMOVAL.out.reads)
 
+    // Deblur (and cleanliness downstream) can't handle underscores in sample IDs
+    RENAME_SAMPLES(FASTQ_SYNC.out.reads)
+
     // Drop samples with fewer than 100 reads before any ASV inference
     def min_reads = params.min_reads ?: 100
 
-    FASTQ_SYNC.out.reads
+    RENAME_SAMPLES.out.reads
     .branch { sample_id, r1, r2 ->
         pass: hasMinReads(r1, min_reads)
         fail: true
