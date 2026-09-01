@@ -58,6 +58,12 @@ Whole workflow can be executed by:
 nextflow run main.nf --input <path/to/your/samplesheet.csv> --outdir <path/to/your/result_dir>
 ```
 
+When you want to specify which tools should be executed:
+
+```
+nextflow run main.nf --input <path/to/your/samplesheet.csv> --outdir <path/to/your/result_dir> --asv_inference dada2_paired --classifier idtaxa
+```
+
 **Test the pipeline**
 
 During installation of prerequisites, the test dataset was download in the `test` directory, you can therefore quickly test the pipeline functionality using:
