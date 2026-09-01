@@ -53,7 +53,9 @@ process VSEARCH_UNOISE3 {
     #       Simple IDs ensure the FASTA headers match the OTU table row keys,
     #       which in turn match what the taxonomy classifiers emit as SeqIDs.
     awk '/^>/{print ">ASV" ++n; next}{print}' zotus.fasta \
-        | sed 's/;size=[0-9]*//' > ASV_sequences.fasta
+        | sed 's/;size=[0-9]*//' > ASV_sequences_tmp.fasta
+
+    tr '[:lower:]' '[:upper:]' < ASV_sequences_tmp.fasta > ASV_sequences.fasta
 
     # ── 7. Convert labeled reads to FASTA for mapping ──
     vsearch --fastx_filter all_reads.fastq \
