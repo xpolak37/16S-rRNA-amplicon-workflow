@@ -31,7 +31,7 @@ include { FASTQC as FASTQC_RAW }        from './modules/fastqc'
 include { FASTQC as FASTQC_TRIMMED }    from './modules/fastqc'
 include { MULTIQC }                     from './modules/multiqc'
 include { CUSTOM_SUMMARY_PARSE; CUSTOM_SUMMARY_BLAST; CUSTOM_SUMMARY_RENDER } from './modules/custom_summary'
-include { CUTADAPT; CUTADAPT_DADA2_ORIENT } from './modules/cutadapt'
+include { CUTADAPT; CUTADAPT_DADA2_ORIENT; TAG_AS_FWD } from './modules/cutadapt'
 include { HOST_REMOVAL }                    from './modules/hostile.nf'
 include { PHIX_REMOVAL }                    from './modules/hostile.nf'
 include { FASTQ_SYNC }                      from './modules/hostile.nf'
@@ -218,18 +218,27 @@ workflow {
 
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
+    if (params.dada2_skip_orient) {
+        // Normal paired workflow — no fwd/rev orientation split.
+        // Tag plain reads as the forward orientation so DADA2_PAIRED + the
+        // R script run one standard DADA2 workflow (R1/R2, mergePairs).
+        TAG_AS_FWD(ch_reads_for_asv)
+        dada2_input_paired = TAG_AS_FWD.out
+            .flatten()
+            .collect()
+    } else {
         // Split each sample's reads by orientation so DADA2 learns separate
         // error models per orientation, then merges the ASV tables afterwards.
         CUTADAPT_DADA2_ORIENT(ch_reads_for_asv)
-
         dada2_input_paired = CUTADAPT_DADA2_ORIENT.out
             .map { sample_id, fwd_r1, fwd_r2, rev_r1, rev_r2 ->
                    [fwd_r1, fwd_r2, rev_r1, rev_r2] }
             .flatten()
             .collect()
-
-        DADA2_PAIRED(dada2_input_paired)
     }
+
+    DADA2_PAIRED(dada2_input_paired)
+}
 
     // Merging (only for tools that need merged reads) ────
     def needs_merging = ['deblur', 'unoise','dada2_single']
