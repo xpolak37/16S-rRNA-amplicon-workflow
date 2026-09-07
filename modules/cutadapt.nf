@@ -40,6 +40,22 @@ process CUTADAPT_DADA2_ORIENT {
     """
 }
 
+process TAG_AS_FWD {
+    tag "$sid"
+
+    input:
+    tuple val(sid), path(r1), path(r2)
+
+    output:
+    tuple path("${sid}_fwd_R1.fastq.gz"), path("${sid}_fwd_R2.fastq.gz")
+
+    script:
+    """
+    ln -s "\$(readlink -f ${r1})" ${sid}_fwd_R1.fastq.gz
+    ln -s "\$(readlink -f ${r2})" ${sid}_fwd_R2.fastq.gz
+    """
+}
+
 process CUTADAPT {
     tag "$sample_id"
     publishDir "${params.outdir}/cutadapt", mode: 'copy'
@@ -51,6 +67,7 @@ process CUTADAPT {
     tuple val(sample_id), path("${sample_id}_R1.trimmed.fastq.gz"), path("${sample_id}_R2.trimmed.fastq.gz"), emit: reads
 
     script:
+    def discard = params.cutadapt_discard_untrimmed ? '--discard-untrimmed' : ''
     """
      # Compute reverse complements
     f_rc=\$(echo "${params.f_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)
@@ -58,6 +75,8 @@ process CUTADAPT {
 
     cutadapt \\
         --cores ${task.cpus} \\
+        -e ${params.cutadapt_error_rate} \\
+        ${discard} \\
         -g ^${params.f_primer} -G ^${params.r_primer} \\
         -a ${params.f_nextera} -A ${params.r_nextera} \\
         -A \${f_rc} -a \${r_rc} \\
