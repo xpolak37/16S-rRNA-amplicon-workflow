@@ -511,6 +511,9 @@ workflow {
 */
 
 workflow.onComplete {
+    def outFile = file("${params.outdir}/pipeline_info/params.json")
+    outFile.parent.mkdirs()
+    outFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(params))
     log.info """\
         Pipeline completed at: ${workflow.complete}
         Execution status: ${workflow.success ? 'SUCCESS' : 'FAILED'}
