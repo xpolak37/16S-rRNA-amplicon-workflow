@@ -75,7 +75,7 @@ process CUTADAPT {
     f_rc=\$(echo "${params.f_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)
     r_rc=\$(echo "${params.r_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)
 
-    cutadapt \\
+    cutadapt -n 2\\
         --cores ${task.cpus} \\
         -e ${params.cutadapt_error_rate} \\
         ${discard} \\
