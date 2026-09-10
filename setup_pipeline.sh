@@ -236,6 +236,7 @@ declare -A CONTAINERS=(
     ["quay.io-biocontainers-vsearch-2.30.5--h0bb26bb_0.img"]="docker://quay.io/biocontainers/vsearch:2.30.5--h0bb26bb_0"
     ["quay.io-biocontainers-seaborn-0.13.2.img"]="docker://quay.io/biocontainers/seaborn:0.13.2"
     ["quay.io-biocontainers-blast-2.16.0--h66d330f_4.img"]="docker://quay.io/biocontainers/blast:2.16.0--h66d330f_4"
+    ["quay.io-biocontainers-seqkit-2.13.0--he881be0_0.img"]="docker://quay.io/biocontainers/seqkit:2.13.0--he881be0_0"
 )
 CONTAINER_COUNT=0
 TOTAL_CONTAINERS=${#CONTAINERS[@]}
