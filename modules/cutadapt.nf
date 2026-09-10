@@ -68,6 +68,8 @@ process CUTADAPT {
 
     script:
     def discard = params.cutadapt_discard_untrimmed ? '--discard-untrimmed' : ''
+    def fwd_primers = file("${params.primers_dir}/${params.f_primer_file}")
+    def rev_primers = file("${params.primers_dir}/${params.r_primer_file}")
     """
      # Compute reverse complements
     f_rc=\$(echo "${params.f_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)
@@ -77,7 +79,7 @@ process CUTADAPT {
         --cores ${task.cpus} \\
         -e ${params.cutadapt_error_rate} \\
         ${discard} \\
-        -g ^${params.f_primer} -G ^${params.r_primer} \\
+        -g ^file:${fwd_primers} -G ^file:${rev_primers} \\
         -a ${params.f_nextera} -A ${params.r_nextera} \\
         -A \${f_rc} -a \${r_rc} \\
         -a 'A{10}' -a 'G{10}' -g 'A{10}' -g 'G{10}' \\

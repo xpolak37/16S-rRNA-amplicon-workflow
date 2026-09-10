@@ -119,6 +119,7 @@ params {
     bowtie_dir = '</path/to/your/installation/directory>/bowtie_phix'
     hostile_index_dir = './hostile_index' // path to pre-downloaded hostile human index
     blast_db_dir = './blast_db' // path to local BLAST databases (16S_ribosomal_RNA)
+    primers_dir = './primers' // path to primers fasta files
 }
 ```
 

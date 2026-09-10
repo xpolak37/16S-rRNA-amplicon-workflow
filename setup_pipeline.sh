@@ -143,6 +143,7 @@ mkdir -p logs
 mkdir -p bowtie_phix
 mkdir -p hostile_index
 mkdir -p blast_db
+mkdir -p primers
 
 # Setup log file
 LOGFILE="${INSTALL_DIR}/logs/setup_$(date +%Y%m%d_%H%M%S).log"
@@ -173,7 +174,7 @@ log_success "All required tools are available"
 
 echo ""
 log_info "========================================="
-log_info "STEP 1/6: Downloading pre-built taxonomic classifiers"
+log_info "STEP 1/7: Downloading pre-built taxonomic classifiers"
 log_info "========================================="
 
 CLASSIFIERS_DIR="${INSTALL_DIR}/classifiers"
@@ -215,7 +216,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 2/6: Downloading Singularity containers"
+log_info "STEP 2/7: Downloading Singularity containers"
 log_info "========================================="
 
 SING_DIR="${INSTALL_DIR}/singularity_cache"
@@ -266,7 +267,7 @@ done
 
 echo ""
 log_info "========================================="
-log_info "STEP 3/6: Downloading local BLAST 16S_ribosomal_RNA database"
+log_info "STEP 3/7: Downloading local BLAST 16S_ribosomal_RNA database"
 log_info "========================================="
 
 BLAST_DB_DIR="${INSTALL_DIR}/blast_db"
@@ -295,7 +296,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 4/6: Building bowtie indexes"
+log_info "STEP 4/7: Building bowtie indexes"
 log_info "========================================="
 
 BOWTIE_DIR="${INSTALL_DIR}/bowtie_phix"
@@ -336,7 +337,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 5/6: Downloading human decontamination bowtie2 index"
+log_info "STEP 5/7: Downloading human decontamination bowtie2 index"
 log_info "========================================="
 
 HOSTILE_DIR="${INSTALL_DIR}/hostile_index"
@@ -373,7 +374,7 @@ fi
 
 echo ""
 log_info "========================================="
-log_info "STEP 6/6: Downloading test dataset"
+log_info "STEP 6/7: Downloading test dataset"
 log_info "========================================="
 
 TEST_DIR="${PIPELINE_DIR}"
@@ -409,6 +410,36 @@ else
     fi
 fi
 
+#===============================================================================
+# CREATE PRIMER FILES
+#===============================================================================
+
+echo ""
+log_info "========================================="
+log_info "STEP 7/7: Creating primer files"
+log_info "========================================="
+
+PRIMER_DIR="${PIPELINE_DIR}/primers"
+mkdir -p "${PRIMER_DIR}"
+
+log_info "Writing forward primer file..."
+cat > "${PRIMER_DIR}/ILL_V3V4_fwd.fasta" << 'EOF'
+>ILL_V3V4_F
+CCTACGGGNGGCWGCAG
+EOF
+
+log_info "Writing reverse primer file..."
+cat > "${PRIMER_DIR}/ILL_V3V4_rev.fasta" << 'EOF'
+>ILL_V3V4_R
+GACTACHVGGGTATCTAATCC
+EOF
+
+if [ -f "${PRIMER_DIR}/ILL_V3V4_fwd.fasta" ] && [ -f "${PRIMER_DIR}/ILL_V3V4_rev.fasta" ]; then
+    log_success "Primer files created in ${PRIMER_DIR}"
+else
+    log_error "Failed to create primer files"
+    exit 1
+fi
 
 #===============================================================================
 # GENERATE CONFIGURATION FILE
