@@ -64,7 +64,7 @@ process CUTADAPT {
     tuple val(sample_id), path(read1), path(read2)
     
     output:
-    tuple val(sample_id), path("${sample_id}_R1.trimmed.fastq.gz"), path("${sample_id}_R2.trimmed.fastq.gz"), emit: reads
+    tuple val(sample_id), path("${sample_id}_trimmed_R1.fastq.gz"), path("${sample_id}_trimmed_R2.fastq.gz"), emit: reads
 
     script:
     def discard = params.cutadapt_discard_untrimmed ? '--discard-untrimmed' : ''
@@ -84,8 +84,8 @@ process CUTADAPT {
         -A \${f_rc} -a \${r_rc} \\
         -a 'A{10}' -a 'G{10}' -g 'A{10}' -g 'G{10}' \\
         -A 'A{10}' -A 'G{10}' -G 'A{10}' -G 'G{10}' \\
-        -o ${sample_id}_R1.trimmed.fastq.gz \\
-        -p ${sample_id}_R2.trimmed.fastq.gz \\
+        -o ${sample_id}_trimmed_R1.fastq.gz \\
+        -p ${sample_id}_trimmed_R2.fastq.gz \\
         ${read1} ${read2}
 
     """
