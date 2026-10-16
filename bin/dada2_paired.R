@@ -43,7 +43,15 @@ minOverlap   <- as.integer(get_arg(args, "--minOverlap",   "12"))
 MIN_GZ_BYTES <- 20L
 
 is_nonempty_gz <- function(paths) {
-  file.exists(paths) & (file.info(paths)$size >= MIN_GZ_BYTES)
+  vapply(paths, function(p) {
+    if (is.na(p) || !file.exists(p)) return(FALSE)
+    con <- tryCatch(gzfile(p, "rt"), error = function(e) NULL)
+    if (is.null(con)) return(FALSE)
+    on.exit(close(con))
+    line <- tryCatch(readLines(con, n = 1L, warn = FALSE),
+                     error = function(e) character(0))
+    length(line) > 0L && nzchar(line[[1]])
+  }, logical(1L), USE.NAMES = FALSE)
 }
 
 getN <- function(x) sum(getUniques(x))
@@ -119,9 +127,11 @@ run_one_orientation <- function(fnFs, fnRs, tag) {
 }
 
 # ── Run both orientations ──────────────────────────────────────────────────────
+run_fwd <- !is.null(input_fwd_R1) && any(is_nonempty_gz(input_fwd_R1))
+run_rev <- !is.null(input_rev_R1) && any(is_nonempty_gz(input_rev_R1))
 
-fwd <- run_one_orientation(input_fwd_R1, input_fwd_R2, "fwd")
-rev <- run_one_orientation(input_rev_R1, input_rev_R2, "rev")
+fwd <- if (run_fwd) run_one_orientation(input_fwd_R1, input_fwd_R2, "fwd") else NULL
+rev <- if (run_rev) run_one_orientation(input_rev_R1, input_rev_R2, "rev") else NULL
 
 if (is.null(fwd) && is.null(rev)) {
   stop("No reads in either orientation. Cannot produce ASV table.")
@@ -164,14 +174,12 @@ build_track <- function(orient) {
   sample_names <- orient$sample_names
   out_mat      <- orient$out
 
-  # filterAndTrim rownames are input file paths — detect tag from first row
-  tag <- if (grepl("_fwd_", rownames(out_mat)[1])) "fwd" else "rev"
-  rownames(out_mat) <- basename_to_sampleid(rownames(out_mat), tag)
+  # out_mat rows are in the same order as the inputs that produced sample_names.
+  rownames(out_mat) <- sample_names
 
   # Samples that made it all the way through mergePairs
   surviving <- rownames(orient$seqtab %||% matrix(nrow = 0, ncol = 0))
 
-  # Per-dada-object read counts indexed by sample name
   dada_counts <- function(dada_list, sids) {
     if (is.null(dada_list)) return(setNames(rep(0L, length(sids)), sids))
     setNames(sapply(dada_list, getN), names(dada_list))[sids]

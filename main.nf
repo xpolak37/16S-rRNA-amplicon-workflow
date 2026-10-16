@@ -29,12 +29,16 @@ log.info """\
 
 include { FASTQC as FASTQC_RAW }        from './modules/fastqc'
 include { FASTQC as FASTQC_TRIMMED }    from './modules/fastqc'
+include { SEQKIT_STATS as SEQKIT_STATS_RAW }        from './modules/stats'
+include { SEQKIT_STATS as SEQKIT_STATS_CUTADAPT }        from './modules/stats'
+include { SEQKIT_STATS as SEQKIT_STATS_HOSTILE }        from './modules/stats'
 include { MULTIQC }                     from './modules/multiqc'
 include { CUSTOM_SUMMARY_PARSE; CUSTOM_SUMMARY_BLAST; CUSTOM_SUMMARY_RENDER } from './modules/custom_summary'
-include { CUTADAPT; CUTADAPT_DADA2_ORIENT } from './modules/cutadapt'
+include { CUTADAPT; CUTADAPT_DADA2_ORIENT; TAG_AS_FWD } from './modules/cutadapt'
 include { HOST_REMOVAL }                    from './modules/hostile.nf'
 include { PHIX_REMOVAL }                    from './modules/hostile.nf'
 include { FASTQ_SYNC }                      from './modules/hostile.nf'
+include { RENAME_SAMPLES } from './modules/rename_samples.nf'
 include { DADA2_PAIRED }                       from './modules/dada2'
 include { DADA2_SINGLE }                       from './modules/dada2'
 include { MERGING_READS }               from './modules/se_preprocessing.nf'
@@ -174,7 +178,13 @@ workflow {
     
     // FastQC on raw reads
     FASTQC_RAW(ch_input_reads, "raw")
-    
+    ch_input_reads
+        .flatMap { sample_id, r1, r2 -> [ r1, r2 ] }   // all R1s and R2s, flat
+        .collect()                                      // -> single list, one emission
+        .set { ch_all_reads }
+
+    SEQKIT_STATS_RAW(ch_all_reads,"raw")
+
     // Optional subsampling for --quick mode
     if (params.quick) {
         SEQTK_SUBSAMPLE(ch_input_reads)
@@ -188,7 +198,13 @@ workflow {
 
     // fastqc TRIMMED
     FASTQC_TRIMMED(CUTADAPT.out.reads, "trimmed")
-    
+    CUTADAPT.out.reads
+        .flatMap { sample_id, r1, r2 -> [ r1, r2 ] }   // all R1s and R2s, flat
+        .collect()                                      // -> single list, one emission
+        .set { ch_cutadapt_reads }
+
+    SEQKIT_STATS_CUTADAPT(ch_cutadapt_reads,"cutadapt")
+
     // Host and PhiX removal
     path_bowtie_phix = params.bowtie_dir
     path_hostile_index = params.hostile_index_dir
@@ -196,10 +212,22 @@ workflow {
     PHIX_REMOVAL(HOST_REMOVAL.out.reads, path_bowtie_phix)
     FASTQ_SYNC(PHIX_REMOVAL.out.reads)
 
+    // Stats
+    FASTQ_SYNC.out.reads
+        .flatMap { sample_id, r1, r2 -> [ r1, r2 ] }   // all R1s and R2s, flat
+        .collect()                                      // -> single list, one emission
+        .set { ch_decontam_reads }
+
+    SEQKIT_STATS_HOSTILE(ch_decontam_reads,"hostile")
+    
+    // Deblur (and cleanliness downstream) can't handle underscores in sample IDs
+    RENAME_SAMPLES(FASTQ_SYNC.out.reads)
+
+    
     // Drop samples with fewer than 100 reads before any ASV inference
     def min_reads = params.min_reads ?: 100
 
-    FASTQ_SYNC.out.reads
+    RENAME_SAMPLES.out.reads
     .branch { sample_id, r1, r2 ->
         pass: hasMinReads(r1, min_reads)
         fail: true
@@ -214,18 +242,27 @@ workflow {
 
     // DADA2 PAIRED
     if ('dada2_paired' in workflowsToRun.asv_tools) {
+    if (params.dada2_skip_orient) {
+        // Normal paired workflow — no fwd/rev orientation split.
+        // Tag plain reads as the forward orientation so DADA2_PAIRED + the
+        // R script run one standard DADA2 workflow (R1/R2, mergePairs).
+        TAG_AS_FWD(ch_reads_for_asv)
+        dada2_input_paired = TAG_AS_FWD.out
+            .flatten()
+            .collect()
+    } else {
         // Split each sample's reads by orientation so DADA2 learns separate
         // error models per orientation, then merges the ASV tables afterwards.
         CUTADAPT_DADA2_ORIENT(ch_reads_for_asv)
-
         dada2_input_paired = CUTADAPT_DADA2_ORIENT.out
             .map { sample_id, fwd_r1, fwd_r2, rev_r1, rev_r2 ->
                    [fwd_r1, fwd_r2, rev_r1, rev_r2] }
             .flatten()
             .collect()
-
-        DADA2_PAIRED(dada2_input_paired)
     }
+
+    DADA2_PAIRED(dada2_input_paired)
+}
 
     // Merging (only for tools that need merged reads) ────
     def needs_merging = ['deblur', 'unoise','dada2_single']
@@ -498,6 +535,9 @@ workflow {
 */
 
 workflow.onComplete {
+    def outFile = file("${params.outdir}/pipeline_info/params.json")
+    outFile.parent.mkdirs()
+    outFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(params))
     log.info """\
         Pipeline completed at: ${workflow.complete}
         Execution status: ${workflow.success ? 'SUCCESS' : 'FAILED'}

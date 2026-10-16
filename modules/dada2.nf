@@ -10,6 +10,9 @@ process DADA2_PAIRED {
     path "ASV_sequences.fasta", emit: fasta
     
     script:
+    def rev_args = params.dada2_skip_orient
+        ? ''
+        : "--input_rev_R1 \${rev_R1_files} --input_rev_R2 \${rev_R2_files}"
     """
     fwd_R1_files=\$(ls *_fwd_R1.fastq.gz 2>/dev/null | sort | tr '\\n' ' ')
     fwd_R2_files=\$(ls *_fwd_R2.fastq.gz 2>/dev/null | sort | tr '\\n' ' ')

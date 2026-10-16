@@ -40,6 +40,22 @@ process CUTADAPT_DADA2_ORIENT {
     """
 }
 
+process TAG_AS_FWD {
+    tag "$sid"
+
+    input:
+    tuple val(sid), path(r1), path(r2)
+
+    output:
+    tuple path("${sid}_fwd_R1.fastq.gz"), path("${sid}_fwd_R2.fastq.gz")
+
+    script:
+    """
+    ln -s "\$(readlink -f ${r1})" ${sid}_fwd_R1.fastq.gz
+    ln -s "\$(readlink -f ${r2})" ${sid}_fwd_R2.fastq.gz
+    """
+}
+
 process CUTADAPT {
     tag "$sample_id"
     publishDir "${params.outdir}/cutadapt", mode: 'copy'
@@ -48,23 +64,28 @@ process CUTADAPT {
     tuple val(sample_id), path(read1), path(read2)
     
     output:
-    tuple val(sample_id), path("${sample_id}_R1.trimmed.fastq.gz"), path("${sample_id}_R2.trimmed.fastq.gz"), emit: reads
+    tuple val(sample_id), path("${sample_id}_trimmed_R1.fastq.gz"), path("${sample_id}_trimmed_R2.fastq.gz"), emit: reads
 
     script:
+    def discard = params.cutadapt_discard_untrimmed ? '--discard-untrimmed' : ''
+    def fwd_primers = file("${params.primers_dir}/${params.f_primer_file}")
+    def rev_primers = file("${params.primers_dir}/${params.r_primer_file}")
     """
      # Compute reverse complements
     f_rc=\$(echo "${params.f_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)
     r_rc=\$(echo "${params.r_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)
 
-    cutadapt \\
+    cutadapt -n 2\\
         --cores ${task.cpus} \\
-        -g ^${params.f_primer} -G ^${params.r_primer} \\
+        -e ${params.cutadapt_error_rate} \\
+        ${discard} \\
+        -g ^file:${fwd_primers} -G ^file:${rev_primers} \\
         -a ${params.f_nextera} -A ${params.r_nextera} \\
         -A \${f_rc} -a \${r_rc} \\
         -a 'A{10}' -a 'G{10}' -g 'A{10}' -g 'G{10}' \\
         -A 'A{10}' -A 'G{10}' -G 'A{10}' -G 'G{10}' \\
-        -o ${sample_id}_R1.trimmed.fastq.gz \\
-        -p ${sample_id}_R2.trimmed.fastq.gz \\
+        -o ${sample_id}_trimmed_R1.fastq.gz \\
+        -p ${sample_id}_trimmed_R2.fastq.gz \\
         ${read1} ${read2}
 
     """
