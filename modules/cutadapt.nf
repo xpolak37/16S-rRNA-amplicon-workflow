@@ -62,14 +62,14 @@ process CUTADAPT {
     
     input:
     tuple val(sample_id), path(read1), path(read2)
-    
+    path fwd_primers
+    path rev_primers
+
     output:
     tuple val(sample_id), path("${sample_id}_trimmed_R1.fastq.gz"), path("${sample_id}_trimmed_R2.fastq.gz"), emit: reads
 
     script:
     def discard = params.cutadapt_discard_untrimmed ? '--discard-untrimmed' : ''
-    def fwd_primers = file("${params.primers_dir}/${params.f_primer_file}")
-    def rev_primers = file("${params.primers_dir}/${params.r_primer_file}")
     """
      # Compute reverse complements
     f_rc=\$(echo "${params.f_nextera}" | tr 'ACGTacgt' 'TGCAtgca' | rev)

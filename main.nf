@@ -194,7 +194,9 @@ workflow {
     }
 
     // cutadapt for primer and adapter trimming
-    CUTADAPT(ch_reads_for_cutadapt)
+    def fwd_primers = file("${params.primers_dir}/${params.f_primer_file}")
+    def rev_primers = file("${params.primers_dir}/${params.r_primer_file}")
+    CUTADAPT(ch_reads_for_cutadapt, fwd_primers, rev_primers)
 
     // fastqc TRIMMED
     FASTQC_TRIMMED(CUTADAPT.out.reads, "trimmed")
